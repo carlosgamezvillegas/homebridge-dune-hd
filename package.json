@@ -1,0 +1,49 @@
+{
+  "displayName": "Homebridge Dune HD",
+  "name": "homebridge-dune-hd",
+  "version": "0.1.0",
+  "description": "omebridge Plugin to control your Dune HDH.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/carlosgamezvillegas/homebridge-dune-hd.git"
+  },
+  "bugs": {
+    "url": "https://github.com/carlosgamezvillegas/homebridge-dune-hd/issues"
+  },
+  "engines": {
+    "node": ">=16.13.0",
+    "homebridge": ">=1.3.8"
+  },
+  "main": "index.js",
+  "keywords": [
+    "homebridge-plugin",
+    "homebridge-dune-hd",
+    "homebridge",
+    "Dune",
+    "Dune HD",
+    "Real Vision 4K",
+    "Ultra Vision 4K",
+    "Max Vision 4K",
+    "Pro Vision 4K Solo",
+    "Magic 4K",
+    "SmartBox 4K Plus",
+    "SmartBox 4K",
+    "homekit",
+    "blu-ray"
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^14.14.6",
+    "@typescript-eslint/eslint-plugin": "^4.6.1",
+    "@typescript-eslint/parser": "^4.6.1",
+    "eslint": "^7.13.0",
+    "homebridge": "^1.2.3",
+    "nodemon": "^2.0.6",
+    "rimraf": "^3.0.2",
+    "ts-node": "^9.0.0",
+    "typescript": "^4.0.5"
+  },
+  "homepage": "https://github.com/carlosgamezvillegas/homebridge-dune-hd#readme",
+  "author": "Carlos Gamez"
+}
