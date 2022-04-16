@@ -3,6 +3,7 @@ const PLATFORM_NAME = 'duneHDPlugin';
 const PLUGIN_NAME = 'homebridge-dune-hd';
 const request = require('http');
 const udp = require('dgram');
+const { runInThisContext } = require('vm');
 
 
 module.exports = (api) => {
@@ -82,6 +83,7 @@ class duneHDAccessory {
         this.mediaState = 4;
         this.videoState = false;
         this.audioState = false;
+        this.chapterTime = '';
         this.inputName = 'Media Name';
         this.mediaDuration = 'Runtime';
         this.mediaElapse = 'Elapsed Time';
@@ -90,13 +92,14 @@ class duneHDAccessory {
         this.language = 'Audio Language';
         this.showState = false;
         this.httpNotResponding = 0;
+        this.counter = 0;
         /////MovieConstants
         this.currentMovieProgress = 0;
         this.currentMovieProgressState = false;
         this.movieElapsed = 0;
         this.movieRemaining = 0;
         ////Connection parameters
-        this.reconnectionTry = 15;
+        this.reconnectionTry = 10;
         //Device Information//////////////////////////////////////////////////////////////////////////////////////
         this.config.name = platform.config.name || 'Dune HD';
         this.config.ip = platform.config.ip;
@@ -175,13 +178,24 @@ class duneHDAccessory {
             .on('set', (newValue, callback) => {
                 this.platform.log.debug('Set Dune HD Active to: ' + newValue);
                 if (newValue === 1) {
+                    this.newPowerState(true);
+                    this.turnOnCommand = true;
+                    this.turnOffCommand = false;
                     this.sending([this.pressedButton('POWER ON')]);
 
                     // this.WakeupOnLAN();
                     // this.sending([this.pressedButton('POWER ON')]);
                 }
                 else {
-                    this.sending([this.pressedButton('POWER OFF')]);
+                    this.newPowerState(false);
+                    this.turnOffAll();
+                    this.sending([this.pressedButton('STOP')]);
+                    this.turnOffCommand = true;
+                    this.turnOnCommand = false;
+                    // this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=standby&result_syntax=json"]);
+                    setTimeout(() => {
+                        this.sending([this.pressedButton('POWER OFF')]);
+                    }, 200);
                 }
                 callback(null);
             });
@@ -1495,13 +1509,8 @@ class duneHDAccessory {
         // this.udpServer();
         //syncing////////////////////////////////////////////////////////////////////////////////////////
         setInterval(() => {
-            if (this.turnOffCommand === false) {
-
-
+            if (this.turnOffCommand === false && this.turnOnCommand === false) {
                 this.sending([this.query('GET DEVICE INFO')]);
-
-
-
                 if (this.httpNotResponding >= this.reconnectionTry) {
                     this.turnOffAll();
                 }
@@ -1535,27 +1544,27 @@ class duneHDAccessory {
                 }
                 if (this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.inputName) {
                     this.platform.log.debug('Updating Title');
-                    // this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
+                    this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
                     this.videoAudioTitle.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName);
                 }
                 if (this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaDuration) {
                     this.platform.log.debug('Updating Runtime');
                     this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration);
-                    //this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaDuration);
+                    this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaDuration);
                 }
                 if (this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaChapter) {
                     this.platform.log.debug('Updating Current Chapter');
-                    //  this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
+                    this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
                     this.currentChaper.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter);
                 }
                 if (this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaAudioFormat) {
                     this.platform.log.debug('Updating Audio Format');
-                    //this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
+                    this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
                     this.audioFormat.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat);
                 }
                 if (this.audioLanguage.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.language) {
                     this.platform.log.debug('Updating Language');
-                    // this.audioLanguage.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.language);
+                    this.audioLanguage.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.language);
                     this.audioLanguage.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.language);
                 }
 
@@ -1566,10 +1575,8 @@ class duneHDAccessory {
                 setTimeout(() => {
                     this.turnOffCommand = false;
                     this.turnOnCommand = false;
-
-                }, 60000);
+                }, 3000);
             }
-
         }, this.config.pollingInterval);
     }
 
@@ -1580,12 +1587,22 @@ class duneHDAccessory {
     setOn(value, callback) {
         let duneHDState = value;
         if (duneHDState === true) {
+            this.newPowerState(true);
+            this.turnOnCommand = true;
+            this.turnOffCommand = false;
             this.sending([this.pressedButton('POWER ON')]);
         }
         else {
-
-            this.sending([this.pressedButton('POWER OFF')]);
             this.turnOffAll();
+            this.newPowerState(false);
+            this.turnOffCommand = true;
+            this.turnOnCommand = false;
+            this.sending([this.pressedButton('STOP')]);
+            setTimeout(() => {
+                this.sending([this.pressedButton('POWER OFF')]);
+            }, 200);
+            //this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=standby&result_syntax=json"]);
+            //this.sending([this.pressedButton('POWER OFF')]);
         }
         this.platform.log.debug('Set Power to ->', value);
         callback(null);
@@ -1630,6 +1647,7 @@ class duneHDAccessory {
     stopSwitchStateSet(value, callback) {
         this.platform.log.debug('Stop set to:', value);
         if (value === true) {
+            this.mediaDetailsReset();
             this.sending([this.pressedButton('STOP')]);
         }
         callback(null);
@@ -1651,6 +1669,12 @@ class duneHDAccessory {
         let key;
         if (url.includes('cgi-bin/do?cmd=status')) {
             key = 'getDeviceInfo';
+        }
+        else if (url.includes('cgi-bin/do?cmd=standby')) {
+            key = 'Standby';
+        }
+        else if (url.includes('position')) {
+            key = 'position';
         }
         else {
             let key1 = url.split('=');
@@ -1679,99 +1703,115 @@ class duneHDAccessory {
 
     //////////Current Status//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     newVolumeStatus(newVolumeNum) {
-        if (this.currentVolume !== newVolumeNum) {
-            this.currentVolume = newVolumeNum;
-            if (newVolumeNum === 0) {
-                this.currentMuteState = true;
-                this.currentVolumeSwitch = false;
-            }
-            if (newVolumeNum !== 0) {
-                this.currentMuteState = false;
-                this.currentVolumeSwitch = true;
-            }
-            this.speakerService.updateCharacteristic(this.platform.Characteristic.Volume, this.currentVolume);
-            this.speakerService.updateCharacteristic(this.platform.Characteristic.Mute, this.currentMuteState);
-            this.speakerService.getCharacteristic(this.platform.Characteristic.Volume).updateValue(this.currentVolume);
-            this.speakerService.getCharacteristic(this.platform.Characteristic.Mute).updateValue(this.currentMuteState)
-            if (this.config.volume === true) {
-                this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentVolume);
-                this.volumeDimmer.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentVolume);
-                this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.On, this.currentVolumeSwitch);
-                this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentVolumeSwitch);
+        if (this.turnOffCommand !== true || newVolumeNum === 0) {
+
+            if (this.currentVolume !== newVolumeNum) {
+                this.currentVolume = newVolumeNum;
+                if (newVolumeNum === 0) {
+                    this.currentMuteState = true;
+                    this.currentVolumeSwitch = false;
+                }
+                if (newVolumeNum !== 0) {
+                    this.currentMuteState = false;
+                    this.currentVolumeSwitch = true;
+                }
+                this.speakerService.updateCharacteristic(this.platform.Characteristic.Volume, this.currentVolume);
+                this.speakerService.updateCharacteristic(this.platform.Characteristic.Mute, this.currentMuteState);
+                this.speakerService.getCharacteristic(this.platform.Characteristic.Volume).updateValue(this.currentVolume);
+                this.speakerService.getCharacteristic(this.platform.Characteristic.Mute).updateValue(this.currentMuteState)
+                if (this.config.volume === true) {
+                    this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentVolume);
+                    this.volumeDimmer.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentVolume);
+                    this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.On, this.currentVolumeSwitch);
+                    this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentVolumeSwitch);
+                }
             }
         }
     }
 
     newAudioStatus(audio) {
         this.platform.log.debug(audio);
-        let thisAudio = '';
+        let newAduio = '';
         if (audio.includes('Digital Plus')) {
-            thisAudio = 'Dolby Digital Plus';
+            newAduio = 'Dolby Digital Plus';
         }
         else if (audio.includes('Dolby Digital')) {
-            thisAudio = 'Dolby Digital';
+            newAduio = 'Dolby Digital';
         }
         else if (audio.includes('TrueHD')) {
-            thisAudio = 'Dolby TrueHD-Atmos';
+            newAduio = 'Dolby TrueHD - Atmos';
         }
         else if (audio.includes('DTS-HD High') || audio.includes('DTS HD High')) {
-            thisAudio = 'DTS-HD High Resolution';
+            newAduio = 'DTS-HD High Resolution';
         }
-        else if (audio.includes('DTS-HD Master') || audio.includes('DTS-HD MA')) {
-            thisAudio = 'DTS-HD MA - DTS X';
+        else if (audio.includes('DTS HD Master') || audio.includes('DTS HD MA')) {
+            newAduio = 'DTS HD MA - DTS X';
         }
         else if (audio.includes('DTS')) {
-            thisAudio = 'DTS';
+            newAduio = 'DTS';
         }
         else if (audio.includes('LPCM')) {
-            thisAudio = 'LPCM';
+            newAduio = 'LPCM';
         }
         else if (audio.includes('MPEG')) {
-            thisAudio = 'MPEG Audio';
+            newAduio = 'MPEG Audio';
 
         }
         else if (audio.includes('CD Audio')) {
-            thisAudio = 'CD Audio';
+            newAduio = 'CD Audio';
 
         }
         else {
-            thisAudio = audio;
+            newAduio = audio;
 
         }
-
-        this.newAudioFormat(thisAudio);
+        this.newAudioFormat(newAduio);
     }
+
     newInputName(newName) {
-        if (this.inputName !== newName) {
-            this.platform.log.debug(newName);
-            this.inputName = newName;
-            this.platform.log.debug(this.inputName);
-            this.videoAudioTitle.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName);
-            // this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
+        if (typeof newName !== 'undefined') {
+            if (newName.length >= 64) {
+                newName = newName.slice(0, 60) + "...";
+            }
+            this.platform.log.debug('New input name: ' + newName);
+            if (this.inputName !== newName) {
+                this.inputName = newName;
+                this.platform.log.debug(this.inputName);
+                this.videoAudioTitle.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName);
+                this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
+            }
         }
+
     }
     newInputDuration(newDuration) {
-
-        if (this.mediaDuration !== newDuration) {
-            this.platform.log.debug(newDuration);
-            this.mediaDuration = newDuration;
-            this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration);
-            // this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaDuration);
+        if (typeof newDuration !== 'undefined') {
+            this.platform.log.debug('New input duraiton: ' + newDuration);
+            if (this.mediaDuration !== newDuration) {
+                this.mediaDuration = newDuration;
+                this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration);
+                this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaDuration);
+            }
         }
 
     }
     newCurrentChapter(currentChapter) {
-        this.platform.log.debug(currentChapter);
-        if (this.mediaChapter !== currentChapter) {
-            this.platform.log.debug(currentChapter);
-            this.mediaChapter = currentChapter;
-            this.currentChaper.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter);
-            this.currentChaper.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
-            this.currentChaper.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+        if (typeof currentChapter !== 'undefined') {
+            if (currentChapter.length >= 64) {
+                currentChapter = currentChapter.slice(0, 60) + "...";
+            }
+            this.platform.log.debug('New input progress: ' + currentChapter);
+            if (this.mediaChapter !== currentChapter) {
+                this.mediaChapter = currentChapter;
+                this.currentChaper.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter);
+                this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
+                this.currentChaper.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
+                this.currentChaper.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
         }
     }
     newElapsedTime(elapsedTime) {
         /*
+        if(typeof elapsedTime !=='undefined'){
         this.platform.log.debug(elapsedTime);
         if (this.mediaElapse !== elapsedTime) {
             this.mediaElapse = elapsedTime;
@@ -1779,16 +1819,20 @@ class duneHDAccessory {
             this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
             this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
         }
+    }
         */
     }
     newAudioFormat(audioType) {
-        this.platform.log.debug(audioType);
-        if (this.mediaAudioFormat !== audioType) {
-            this.mediaAudioFormat = audioType;
+        if (typeof audioType !== 'undefined') {
             this.platform.log.debug(audioType);
-            this.audioFormat.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat);
-            this.audioFormat.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
-            this.audioFormat.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            this.platform.log.debug('New audio format: ' + audioType);
+            if (this.mediaAudioFormat !== audioType) {
+                this.mediaAudioFormat = audioType;
+                this.audioFormat.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat);
+                this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
+                this.audioFormat.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
+                this.audioFormat.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
         }
     }
     newLanguageSelector(langSelector) {
@@ -1874,98 +1918,107 @@ class duneHDAccessory {
         else if (langSelector.includes('tur')) {
             correctLanguage = 'Turkish';
         }
+        else if (langSelector.includes('und')) {
+            correctLanguage = 'Language Undefined';
+        }
         else {
             correctLanguage = langSelector
         }
         this.newLanguage(correctLanguage);
     }
     newLanguage(lang) {
-        this.platform.log.debug(lang);
-        if (this.language !== lang) {
-            this.language = lang;
-            this.platform.log.debug(lang);
-            this.audioLanguage.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.language);
-            this.audioLanguage.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
-            this.audioLanguage.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+        if (typeof lang !== 'undefined') {
+            this.platform.log.debug('New audio language: ' + lang);
+            if (this.language !== lang) {
+                this.language = lang;
+                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.language);
+                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
+                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
         }
     }
 
     newMovieTime(newMovieTime) {
-        if (newMovieTime === 0) {
-            this.currentMovieProgressState = false;
-            this.currentMovieProgress = 0;
-        }
-        if (newMovieTime !== 0) {
-            this.currentMovieProgressState = true;
-        }
-        if (this.movieRemaining !== 0) {
-            this.currentMovieProgress = Math.round(newMovieTime * 100 / (this.movieRemaining));
-        }
-        if (this.currentMovieProgressState === true && this.currentMovieProgress === 0) {
-            this.currentMovieProgress = 1;
-        }
-        if (this.currentMovieProgress > 100) { this.currentMovieProgress = 100 }
-        if (this.config.movieControl === true) {
-            this.movieControlL.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentMovieProgress);
-            // this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentMovieProgress);
-            this.movieControlL.updateCharacteristic(this.platform.Characteristic.On, this.currentMovieProgressState);
-            // this.movieControlL.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentMovieProgressState);
+        if (this.showState === true || newMovieTime === 0) {
+            if (newMovieTime === 0) {
+                this.currentMovieProgressState = false;
+                this.currentMovieProgress = 0;
+            }
+            if (newMovieTime !== 0) {
+                this.currentMovieProgressState = true;
+            }
+            if (this.movieRemaining !== 0) {
+                this.currentMovieProgress = Math.round(newMovieTime * 100 / (this.movieRemaining));
+            }
+            if (this.currentMovieProgressState === true && this.currentMovieProgress === 0) {
+                this.currentMovieProgress = 1;
+            }
+            if (this.currentMovieProgress > 100) { this.currentMovieProgress = 100 }
+            if (this.config.movieControl === true) {
+                this.movieControlL.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentMovieProgress);
+                this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentMovieProgress);
+                this.movieControlL.updateCharacteristic(this.platform.Characteristic.On, this.currentMovieProgressState);
+                this.movieControlL.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentMovieProgressState);
+            }
         }
     }
     newPowerState(newValue) {
-        if (newValue === true) {
-            this.powerStateTV = 1;
-        }
-        else {
-            this.powerStateTV = 0;
-        }
-        if (this.powerSate !== newValue) {
-            this.powerState = newValue;
-            this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
-            this.tvService.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.powerStateTV);
-            if (this.config.powerB === true) {
-                this.service.updateCharacteristic(this.platform.Characteristic.On, this.powerState);
-                this.service.getCharacteristic(this.platform.Characteristic.On).updateValue(this.powerState);
+        if (this.turnOffCommand === false && this.turnOnCommand === false) {
+            if (newValue === true) {
+                this.powerStateTV = 1;
+            }
+            else {
+                this.powerStateTV = 0;
+            }
+            if (this.powerSate !== newValue) {
+                this.powerState = newValue;
+                this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
+                this.tvService.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.powerStateTV);
+                if (this.config.powerB === true) {
+                    this.service.updateCharacteristic(this.platform.Characteristic.On, this.powerState);
+                    this.service.getCharacteristic(this.platform.Characteristic.On).updateValue(this.powerState);
+                }
             }
         }
     }
     newPlayBackState(newPlay) {
         this.playBackState = newPlay;
-        if (this.playBackState[0] === true) {
-            this.mediaState = 0;
-        }
-        if (this.playBackState[1] === true) {
-            this.mediaState = 1;
-        }
-        if (this.playBackState[2] === true) {
-            this.mediaState = 2;
-        }
-        if (this.playBackState[0] === false && this.playBackState[1] === false && this.playBackState[2] === false) {
-            this.mediaState = 4;
-        }
+        if (this.turnOffCommand === false || this.playBackState === [false, false, false]) {
+            if (this.playBackState[0] === true) {
+                this.mediaState = 0;
+            }
+            if (this.playBackState[1] === true) {
+                this.mediaState = 1;
+            }
+            if (this.playBackState[2] === true) {
+                this.mediaState = 2;
+            }
+            if (this.playBackState[0] === false && this.playBackState[1] === false && this.playBackState[2] === false) {
+                this.mediaState = 4;
+            }
 
-        if (this.tvService.getCharacteristic(this.platform.Characteristic.Active).value !== this.powerStateTV) {
-            this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
+            if (this.tvService.getCharacteristic(this.platform.Characteristic.Active).value !== this.powerStateTV) {
+                this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
+            }
+            if (this.play.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[0]) {
+                this.play.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[0]);
+                this.play.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[0]);
+                this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
+                this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+            }
+            if (this.pause.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[1]) {
+                this.pause.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[1]);
+                this.pause.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[1]);
+                this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
+                this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+            }
+            if (this.stop.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[2]) {
+                this.stop.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[2]);
+                this.stop.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[2]);
+                this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
+                this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+            }
         }
-        if (this.play.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[0]) {
-            this.play.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[0]);
-            // this.play.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[0]);
-            this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-            //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
-        }
-        if (this.pause.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[1]) {
-            this.pause.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[1]);
-            //this.pause.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[1]);
-            this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-            //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
-        }
-        if (this.stop.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[2]) {
-            this.stop.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[2]);
-            // this.stop.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[2]);
-            this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-            //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
-        }
-
     }
     newInputState(newInput) {
         this.inputState = newInput;
@@ -1994,13 +2047,13 @@ class duneHDAccessory {
         else {
         }
         this.tvService.updateCharacteristic(this.platform.Characteristic.ActiveIdentifier, this.inputID);
-        // this.tvService.getCharacteristic(this.platform.Characteristic.ActiveIdentifier).updateValue(this.inputID);
+        this.tvService.getCharacteristic(this.platform.Characteristic.ActiveIdentifier).updateValue(this.inputID);
     }
     /////////////////HTTP Event decoder
     httpEventDecoder(rawData, key) {
         //this.platform.log(`${key} Sent by HTTP`);
         this.platform.log.debug(rawData);
-        this.platform.log.debug(key)
+        this.platform.log.debug(key);
         if (key.includes('getDeviceInfo') || key.includes('volume') || key.includes('mute') || key.includes('position')) {
             this.platform.log.debug(`Response: ${this.commandName(key)} Command Executed`);
         }
@@ -2009,35 +2062,57 @@ class duneHDAccessory {
                 this.platform.log(`Response: ${this.commandName(key)} Command Executed`);
                 if (key.includes('A057')) {
                     this.newPowerState(true);
-                    this.turnOnCommand = true;
                 }
             }
         }
-        if (rawData.player_state === 'standby' || rawData.player_state === 'undefined') {
+
+        if (key.includes('A15E') || key.includes('standby')) {
+            this.turnOffAll();
+        }
+        else if (key.includes('B748')) {
+            this.newPlayBackState([true, false, false]);
+        }
+        else if (key.includes('E619')) {
+            this.newPlayBackState([false, false, false]);
+            this.showState = false;
+            this.mediaDetailsReset();
+        }
+        else if (key.includes('E11E')) {
+            this.newPlayBackState([false, true, false]);
+
+        }
+        else if (rawData.player_state === 'standby' || typeof rawData.player_state === 'undefined') {
             if (this.turnOnCommand === false) {
                 this.turnOffAll();
             }
         }
-        if (key.includes('A15E')) {
-            this.turnOffCommand = true;
-            this.turnOffAll();
-        }
-        if (key.includes('B748')) {
-            this.newPlayBackState([true, false, false]);
-        }
-        if (key.includes('E619')) {
-            this.newPlayBackState([false, false, false]);
-            this.mediaDetailsReset();
-        }
-        if (key.includes('E11E')) {
-            this.newPlayBackState([false, true, false]);
+        /*
+                if (rawData.player_state === 'navigator' && rawData.playback_mute === '1') {
+                    if (this.turnOnCommand === false) {
+                        this.turnOffAll();
+                    }
+                }
+                if (rawData.player_state !== 'standby' && rawData.playback_mute === '0') {
+                    if (this.turnOffCommand !== true) {
+                        this.newPowerState(true);
+                    }
+                    if (typeof rawData.playback_volume !== 'undefined') {
+                        if (rawData.playback_mute === '0') {
+                            this.newVolumeStatus(parseInt(rawData.playback_volume));
+                        }
+                        else {
+                            this.newVolumeStatus(0);
+                        }
+                    }
+                }
+        */
 
-        }
-        if (rawData.player_state !== 'standby') {
+        else if (rawData.player_state !== 'standby') {
+
             if (this.turnOffCommand !== true) {
                 this.newPowerState(true);
             }
-            if (rawData.playback_volume !== 'undefined') {
+            if (typeof rawData.playback_volume !== 'undefined') {
                 if (rawData.playback_mute === '0') {
                     this.newVolumeStatus(parseInt(rawData.playback_volume));
                 }
@@ -2045,64 +2120,188 @@ class duneHDAccessory {
                     this.newVolumeStatus(0);
                 }
             }
-        }
-        if (rawData.player_state !== 'standby' && rawData.playback_state !== 'undefined') {
+
             ////////Playback Status.
             if (rawData.playback_state === "paused") {
                 this.newPlayBackState([false, true, false]);
                 this.showState = true;
             }
-            if (rawData.playback_state === "playing" || rawData.playback_state === "seeking") {
+            if (rawData.playback_state === "playing" || rawData.playback_state === "seeking" || rawData.playback_state === "initializing") {
                 this.newPlayBackState([true, false, false]);
                 this.showState = true;
             }
-            if (rawData.playback_state === "undefined") {
+            if (typeof rawData.playback_state === 'undefined' || rawData.playback_state === 'deinitializing') {
                 this.newPlayBackState([false, false, false]);
-                this.showState = false;
                 this.mediaDetailsReset();
             }
-            //////////////////////Media Name///////////////////////////////
-            if (rawData.playback_url !== 'undefined') {
-                this.platform.log.debug("Movie details")
-                let newNameInput = rawData.playback_url.split('/');
-                let nameInput = '';
-                if (Object.values(newNameInput)[Object.keys(newNameInput).length - 1] === 'AVCHD') {
-                    nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 2];
-                    this.newInputName(nameInput);
+            if (this.newPlayBackState === [false, false, false]) {
+                if (this.counter > 2) {
+                    this.mediaDetailsReset();
+                    this.counter = 0;
                 }
-                else {
-                    this.newInputName(rawData.playback_caption);
-                }
-                ///////Media runtime////////////////////
-                this.movieRemaining = parseInt(rawData.playback_duration);
-                let runtimeNumber = this.secondsToTime(parseInt(rawData.playback_duration));
-                if (runtimeNumber.startsWith('0')) {
-                    runtimeNumber = runtimeNumber.substring(1);
-                }
-                this.newInputDuration(runtimeNumber);
-                //////////////////Media Current position
-                this.newMovieTime(parseInt(rawData.playback_position));
-                ////////////////////Media elapsed time////////////////////////////
-                let elapsedRuntimeNumber = this.secondsToTime(parseInt(rawData.playback_position));
-                if (elapsedRuntimeNumber.startsWith('0')) {
-                    elapsedRuntimeNumber = elapsedRuntimeNumber.substring(1);
-                    this.newElapsedTime(elapsedRuntimeNumber);
-                }
-                else {
-                    this.newElapsedTime(elapsedRuntimeNumber);
-                }
-                //////////////Current Chapter////////////////////////
-                this.newCurrentChapter(rawData.playback_extra_caption);
-
-                ///////////////Audio format
-                this.newAudioFormat(rawData['audio_track.' + rawData.audio_track + '.codec']);
-                //////////Audio Lnaguage
-                this.newLanguageSelector(rawData['audio_track.' + rawData.audio_track + '.lang']);
+                this.counter += 1
             }
+            if (typeof rawData.playback_state !== 'undefined') {
+                if (rawData.playback_state !== "initializing" && rawData.playback_state !== 'deinitializing' && rawData.playback_state !== 'seeking') {
+                    //////////////////////Media Name///////////////////////////////
+                    if (typeof rawData.playback_url !== 'undefined') {
+                        // this.platform.log('Playback url 1: ' + rawData.playback_url);
+                        if (rawData.is_video == '1') {
+                            this.platform.log.debug("Movie details")
+                            let newNameInput = rawData.playback_url.split('/');
+                            let nameInput = '';
+                            if (Object.values(newNameInput)[Object.keys(newNameInput).length - 1] === 'AVCHD') {
+                                nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 2];
+                                //this.platform.log('Playback url 12: ' + nameInput);
+                                if (typeof nameInput !== 'undefined') {
+                                    this.newInputName(nameInput);
+                                }
+                                else {
+                                    if (typeof rawData.playback_caption !== 'undefined') {
+                                        this.newInputName(rawData.playback_caption);
+                                    }
+                                }
+                            }
+                            else {
+                                // this.platform.log('Playback url 13: ' + rawData.playback_caption);
+                                if (typeof rawData.playback_caption !== 'undefined') {
+                                    if (rawData.playback_caption.includes('.')) {
+                                        let newNameInput = rawData.playback_caption.split('.');
+                                        let nameInput = Object.values(newNameInput)[0];
+                                        let i = 1;
+                                        while (i < Object.keys(newNameInput).length - 2) {
+                                            nameInput += " " + Object.values(newNameInput)[i];
+                                            i++;
+                                        }
+                                        if (typeof nameInput !== 'undefined') {
+                                            this.newInputName(nameInput);
+                                        }
+                                    }
+                                    else {
+                                        nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
+                                        if (typeof nameInput !== 'undefined') {
+                                            this.newInputName(nameInput);
+                                        }
+                                        else {
+                                            this.newInputName(rawData.playback_caption);
+                                        }
+                                    }
+                                }
+                            }
+                            //this.platform.log('Playback extra: ' + rawData.playback_extra_caption);
+                            if (typeof rawData.playback_extra_caption !== 'undefined') {
+                                if (rawData.playback_extra_caption.includes('.')) {
+                                    let newChapter = rawData.playback_extra_caption.split('.');
+                                    let chapter = Object.values(newChapter)[0];
+                                    if (chapter.startsWith('0')) {
+                                        this.chapterTime = chapter.substring(1);
+                                    }
+                                    let newNameInput = rawData.playback_caption.split('of');
+                                    let numberOfChapters = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
+                                    numberOfChapters = numberOfChapters.replace(/[^0-9]/g, '');
+                                    let currentChap = Object.values(newNameInput)[Object.keys(newNameInput).length - 2];
+                                    currentChap = currentChap.split('(');
+                                    currentChap = Object.values(currentChap)[Object.keys(currentChap).length - 1];
+                                    currentChap = currentChap.replace(/[^0-9]/g, '');
+                                    this.newCurrentChapter('Chapter ' + currentChap + '/' + numberOfChapters + ' ' + this.chapterTime);
+                                }
+                                else {
+                                    let newChapter = rawData.playback_extra_caption.split(' ');
+                                    let chapter = Object.values(newChapter)[Object.keys(newChapter).length - 1];
+                                    if (chapter.startsWith('0')) {
+                                        Object.values(newChapter)[Object.keys(newChapter).length - 1] = chapter.substring(1);
+                                        //this.chapterTime = chapter.substring(1);
+                                    }
+                                    if (typeof rawData.playback_caption !== 'undefined') {
+                                        let newNameInput = rawData.playback_caption.split('of');
+                                        let nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
+                                        let numberOfChapters = nameInput.replace(/[^0-9]/g, '');
+                                        this.newCurrentChapter(Object.values(newChapter)[0] + ' ' + Object.values(newChapter)[1] + '/' + numberOfChapters + ' ' + Object.values(newChapter)[Object.keys(newChapter).length - 1]);
+                                    }
+                                    else {
+                                        this.newCurrentChapter(rawData.playback_extra_caption);
+                                    }
+                                }
 
+                            }
+                        }
+                        else {
+                            if (typeof rawData.playback_caption !== 'undefined') {
+                                // this.platform.log('Playback url 14: ' + rawData.playback_caption);
+                                if (rawData.playback_caption.includes('.')) {
+                                    let newNameInput = rawData.playback_caption.split('.');
+                                    let nameInput = Object.values(newNameInput)[0];
+                                    let i = 1;
+                                    while (i < Object.keys(newNameInput).length - 2) {
+                                        nameInput += " " + Object.values(newNameInput)[i];
+                                        i++;
+                                    }
+                                    if (typeof nameInput !== 'undefined') {
+                                        this.newInputName(nameInput);
+                                    }
+                                }
+                                else {
+                                    this.newInputName(rawData.playback_caption);
+                                }
+                            }
+                            //////////////Current Chapter////////////////////////
+                            this.newCurrentChapter(rawData.playback_extra_caption);
+                        }
+                    }
+                    else {
+                        if (typeof rawData.playback_caption !== 'undefined') {
+                            // this.platform.log('Playback url 14: ' + rawData.playback_caption);
+                            if (rawData.playback_caption.includes('.')) {
+                                let newNameInput = rawData.playback_caption.split('.');
+                                let nameInput = Object.values(newNameInput)[0];
+                                let i = 1;
+                                while (i < Object.keys(newNameInput).length - 2) {
+                                    nameInput += " " + Object.values(newNameInput)[i];
+                                    i++;
+                                }
+                                if (typeof nameInput !== 'undefined') {
+                                    this.newInputName(nameInput);
+                                }
+                            }
+                            else {
+                                this.newInputName(rawData.playback_caption);
+                            }
+                        }
+                        //////////////Current Chapter////////////////////////
+                        this.newCurrentChapter(rawData.playback_extra_caption);
+                    }
+                    ///////Media runtime////////////////////
+                    // this.platform.log('Playback duration: ' + rawData.playback_duration);
+                    this.movieRemaining = parseInt(rawData.playback_duration);
+                    let runtimeNumber = this.secondsToTime(parseInt(rawData.playback_duration));
+                    if (runtimeNumber.startsWith('0')) {
+                        runtimeNumber = runtimeNumber.substring(1);
+                    }
+                    this.newInputDuration(runtimeNumber);
+                    //////////////////Media Current position
+                    //this.platform.log('Playback position: ' + rawData.playback_position);
+                    this.newMovieTime(parseInt(rawData.playback_position));
+                    ////////////////////Media elapsed time////////////////////////////
+                    /*
+                    let elapsedRuntimeNumber = this.secondsToTime(parseInt(rawData.playback_position));
+                    if (elapsedRuntimeNumber.startsWith('0')) {
+                        elapsedRuntimeNumber = elapsedRuntimeNumber.substring(1);
+                        this.newElapsedTime(elapsedRuntimeNumber);
+                    }
+                    else {
+                        this.newElapsedTime(elapsedRuntimeNumber);
+                    }*/
+                    ///////////////Audio format
+                    //this.platform.log('Playback audio track: ' + rawData.audio_track);
+                    this.newAudioStatus(rawData['audio_track.' + rawData.audio_track + '.codec']);
+                    //////////Audio Lnaguage
+                    this.newLanguageSelector(rawData['audio_track.' + rawData.audio_track + '.lang']);
+                }
+            }
             else {
 
             }
+
         }
 
 
@@ -2127,6 +2326,12 @@ class duneHDAccessory {
 
         if (keyS.includes('A15E')) {
             keySent = 'Power Off';
+        }
+        else if (keyS.includes('standby')) {
+            keySent = 'Standby';
+        }
+        else if (keyS.includes('position')) {
+            keySent = 'New Position';
         }
         else if (keyS.includes('9E61')) {
             keySent = 'Recent';
@@ -2440,20 +2645,16 @@ class duneHDAccessory {
     }
     ////Update instructions
     turnOffAll() {
-
         this.newPowerState(false);
         this.newPlayBackState([false, false, false]);
         this.newInputState([false, false, false, false, false, false]);
+        this.newVolumeStatus(0);
         this.mediaDetailsReset();
-        this.moviePlaying = false;
-        this.musicPlaying = false;
-
     }
     mediaDetailsReset() {
-        this.platform.log.debug("Reset details");
+        // this.platform.log("Reset details");
         this.showState = false;
         this.movieRemaining = 0;
-        this.newVolumeStatus(0);
         this.newMovieTime(0);
         this.newAudioFormat('Audio Format');
         this.newInputName('Media Title');
