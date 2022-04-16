@@ -1,4 +1,3 @@
-<span align="center">
 
 # homebridge-dune-hd
 ## HomeKit integration for Dune HD
@@ -152,6 +151,11 @@ This will enable additional extra log which might be helpful to debug all kind o
 Note: Controls won't update if the plugin does not receive a confirmation message from the device
 
 ## Known Issues
+Sometimes the Dune HD device will send back the wrong current status (the device will appear On in Homekit). To solvde this issue do the following using the remote control:
+- Play any movie for at least 5 seconds
+- Stop playback
+- Go back to the main screen
+- Turn off the device
 
 ## Special thanks
 To Fernando for his patience and support.
