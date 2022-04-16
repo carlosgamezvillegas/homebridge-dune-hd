@@ -1,3 +1,4 @@
+<span align="center">
 
 # homebridge-dune-hd
 ## HomeKit integration for Dune HD
