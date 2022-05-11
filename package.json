@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge Dune HD",
   "name": "homebridge-dune-hd",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "omebridge Plugin to control your Dune HDH.",
   "license": "MIT",
   "repository": {
