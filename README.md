@@ -6,6 +6,7 @@
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 [![homebridge-dune-hd](https://badgen.net/npm/v/homebridge-dune-hd?icon=npm)](https://www.npmjs.com/package/homebridge-dune-hd)
 [![mit-license](https://badgen.net/npm/license/lodash)](https://github.com/merdok/homebridge-dune-hd/blob/master/LICENSE)
+  
 </span>
 
 # What is this?
