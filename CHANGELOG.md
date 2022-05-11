@@ -1,4 +1,6 @@
 # Changelog
+## [1.0.1] - 2022-05-10
+- Homebridge Verified badge added
 ## [1.0.0] - 2022-04-16
 - General performance and stability improvements
 - Bug fixes
