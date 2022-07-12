@@ -98,6 +98,7 @@ class duneHDAccessory {
         this.currentMovieProgressState = false;
         this.movieElapsed = 0;
         this.movieRemaining = 0;
+        this.bluryaDVD = false;
         ////Connection parameters
         this.reconnectionTry = 10;
         //Device Information//////////////////////////////////////////////////////////////////////////////////////
@@ -1937,9 +1938,8 @@ class duneHDAccessory {
             }
         }
     }
-
     newMovieTime(newMovieTime) {
-        if (this.showState === true || newMovieTime === 0) {
+        if (this.showState === true || newMovieTime === 0 || this.bluryaDVD === true) {
             if (newMovieTime === 0) {
                 this.currentMovieProgressState = false;
                 this.currentMovieProgress = 0;
@@ -2129,6 +2129,30 @@ class duneHDAccessory {
             if (rawData.playback_state === "playing" || rawData.playback_state === "seeking" || rawData.playback_state === "initializing") {
                 this.newPlayBackState([true, false, false]);
                 this.showState = true;
+            }
+            if (rawData.player_state === "bluray_playback" || rawData.player_state === "dvd_playback") {
+                this.bluryaDVD = true;
+                this.newVolumeStatus(100);
+                if (rawData.playback_speed === "0") {
+                    this.newPlayBackState([false, true, false]);
+                }
+                else {
+                    this.newPlayBackState([true, false, false]);
+                }
+                if (typeof rawData.playback_caption !== 'undefined') {
+                    this.newInputName(rawData.playback_caption);
+                }
+                ///////Media runtime////////////////////
+                // this.platform.log('Playback duration: ' + rawData.playback_duration);
+                this.movieRemaining = parseInt(rawData.playback_duration);
+                let runtimeNumber = this.secondsToTime(parseInt(rawData.playback_duration));
+                if (runtimeNumber.startsWith('0')) {
+                    runtimeNumber = runtimeNumber.substring(1);
+                }
+                this.newInputDuration(runtimeNumber);
+                //////////////////Media Current position
+                // this.platform.log('Playback position: ' + rawData.playback_position);
+                this.newMovieTime(parseInt(rawData.playback_position));
             }
             if (typeof rawData.playback_state === 'undefined' || rawData.playback_state === 'deinitializing') {
                 this.newPlayBackState([false, false, false]);
@@ -2655,6 +2679,7 @@ class duneHDAccessory {
         // this.platform.log("Reset details");
         this.showState = false;
         this.movieRemaining = 0;
+        this.bluryaDVD = false;
         this.newMovieTime(0);
         this.newAudioFormat('Audio Format');
         this.newInputName('Media Title');
