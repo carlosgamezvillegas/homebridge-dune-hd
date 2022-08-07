@@ -20,8 +20,11 @@
       },
       "pollingInterval": {
         "title": "Polling Interval (milliseconds)",
-        "type": "number",
-        "placeholders": "1000",
+        "type": "integer",
+        "placeholders": "4000",
+        "default": 4000,
+        "minimum": 2000,
+        "maximum": 60000,
         "required": false
       },
       "modelName": {
