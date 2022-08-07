@@ -188,15 +188,15 @@ class duneHDAccessory {
                     // this.sending([this.pressedButton('POWER ON')]);
                 }
                 else {
+                    this.sending([this.pressedButton('STOP')]);
                     this.newPowerState(false);
                     this.turnOffAll();
-                    this.sending([this.pressedButton('STOP')]);
                     this.turnOffCommand = true;
                     this.turnOnCommand = false;
                     // this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=standby&result_syntax=json"]);
                     setTimeout(() => {
                         this.sending([this.pressedButton('POWER OFF')]);
-                    }, 200);
+                    }, 1000);
                 }
                 callback(null);
             });
@@ -1594,14 +1594,14 @@ class duneHDAccessory {
             this.sending([this.pressedButton('POWER ON')]);
         }
         else {
+            this.sending([this.pressedButton('STOP')]);
             this.turnOffAll();
             this.newPowerState(false);
             this.turnOffCommand = true;
             this.turnOnCommand = false;
-            this.sending([this.pressedButton('STOP')]);
             setTimeout(() => {
                 this.sending([this.pressedButton('POWER OFF')]);
-            }, 200);
+            }, 1000);
             //this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=standby&result_syntax=json"]);
             //this.sending([this.pressedButton('POWER OFF')]);
         }
@@ -1825,7 +1825,6 @@ class duneHDAccessory {
     }
     newAudioFormat(audioType) {
         if (typeof audioType !== 'undefined') {
-            this.platform.log.debug(audioType);
             this.platform.log.debug('New audio format: ' + audioType);
             if (this.mediaAudioFormat !== audioType) {
                 this.mediaAudioFormat = audioType;
@@ -2085,6 +2084,11 @@ class duneHDAccessory {
             if (this.turnOnCommand === false) {
                 this.turnOffAll();
             }
+            else {
+                setTimeout(() => {
+                    this.turnOnCommand = false
+                }, 3000);
+            }
         }
         /*
                 if (rawData.player_state === 'navigator' && rawData.playback_mute === '1') {
@@ -2154,18 +2158,11 @@ class duneHDAccessory {
                 // this.platform.log('Playback position: ' + rawData.playback_position);
                 this.newMovieTime(parseInt(rawData.playback_position));
             }
-            if (typeof rawData.playback_state === 'undefined' || rawData.playback_state === 'deinitializing') {
+            else if (typeof rawData.playback_state === 'undefined' || rawData.playback_state === 'deinitializing') {
                 this.newPlayBackState([false, false, false]);
                 this.mediaDetailsReset();
             }
-            if (this.newPlayBackState === [false, false, false]) {
-                if (this.counter > 2) {
-                    this.mediaDetailsReset();
-                    this.counter = 0;
-                }
-                this.counter += 1
-            }
-            if (typeof rawData.playback_state !== 'undefined') {
+            else {
                 if (rawData.playback_state !== "initializing" && rawData.playback_state !== 'deinitializing' && rawData.playback_state !== 'seeking') {
                     //////////////////////Media Name///////////////////////////////
                     if (typeof rawData.playback_url !== 'undefined') {
@@ -2174,7 +2171,8 @@ class duneHDAccessory {
                             this.platform.log.debug("Movie details")
                             let newNameInput = rawData.playback_url.split('/');
                             let nameInput = '';
-                            if (Object.values(newNameInput)[Object.keys(newNameInput).length - 1] === 'AVCHD') {
+                            let rightInputName = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
+                            if (rightInputName === 'AVCHD') {
                                 nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 2];
                                 //this.platform.log('Playback url 12: ' + nameInput);
                                 if (typeof nameInput !== 'undefined') {
@@ -2187,39 +2185,51 @@ class duneHDAccessory {
                                 }
                             }
                             else {
+
                                 // this.platform.log('Playback url 13: ' + rawData.playback_caption);
-                                if (typeof rawData.playback_caption !== 'undefined') {
-                                    if (rawData.playback_caption.includes('.')) {
-                                        let newNameInput = rawData.playback_caption.split('.');
-                                        let nameInput = Object.values(newNameInput)[0];
-                                        let i = 1;
-                                        while (i < Object.keys(newNameInput).length - 2) {
-                                            nameInput += " " + Object.values(newNameInput)[i];
-                                            i++;
-                                        }
-                                        if (typeof nameInput !== 'undefined') {
-                                            this.newInputName(nameInput);
-                                        }
+
+                                if (rightInputName.includes('.')) {
+                                    rightInputName = rightInputName.split('.');
+                                    let nameInput = Object.values(rightInputName)[0];
+                                    let i = 1;
+                                    while (i < Object.keys(rightInputName).length - 2) {
+                                        nameInput += " " + Object.values(rightInputName)[i];
+                                        i++;
                                     }
-                                    else {
-                                        nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
-                                        if (typeof nameInput !== 'undefined') {
-                                            this.newInputName(nameInput);
-                                        }
-                                        else {
-                                            this.newInputName(rawData.playback_caption);
-                                        }
+                                    if (typeof nameInput !== 'undefined') {
+                                        this.newInputName(nameInput);
                                     }
                                 }
+                                else {
+                                    nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
+                                    if (typeof nameInput !== 'undefined') {
+                                        this.newInputName(nameInput);
+                                    }
+                                    else {
+                                        this.newInputName(rawData.playback_caption);
+                                    }
+                                }
+
                             }
                             //this.platform.log('Playback extra: ' + rawData.playback_extra_caption);
                             if (typeof rawData.playback_extra_caption !== 'undefined') {
-                                if (rawData.playback_extra_caption.includes('.')) {
-                                    let newChapter = rawData.playback_extra_caption.split('.');
-                                    let chapter = Object.values(newChapter)[0];
-                                    if (chapter.startsWith('0')) {
-                                        this.chapterTime = chapter.substring(1);
+                                if (rawData.playback_extra_caption.includes('.') || rawData.playback_extra_caption.includes('-')) {
+                                    if (rawData.playback_extra_caption.includes('.')) {
+                                        let newChapter = rawData.playback_extra_caption.split('.');
+                                        let chapter = Object.values(newChapter)[0];
+                                        if (chapter.startsWith('0')) {
+                                            this.chapterTime = chapter.substring(1);
+                                        }
                                     }
+                                    if (rawData.playback_extra_caption.includes('-')) {
+                                        let newChapter = rawData.playback_extra_caption.split('-');
+                                        let chapter = Object.values(newChapter)[1];
+                                        if (chapter.startsWith(' 0')) {
+                                            this.chapterTime = chapter.substring(2);
+                                        }
+                                    }
+
+
                                     let newNameInput = rawData.playback_caption.split('of');
                                     let numberOfChapters = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
                                     numberOfChapters = numberOfChapters.replace(/[^0-9]/g, '');
@@ -2233,14 +2243,14 @@ class duneHDAccessory {
                                     let newChapter = rawData.playback_extra_caption.split(' ');
                                     let chapter = Object.values(newChapter)[Object.keys(newChapter).length - 1];
                                     if (chapter.startsWith('0')) {
-                                        Object.values(newChapter)[Object.keys(newChapter).length - 1] = chapter.substring(1);
+                                        chapter = chapter.substring(1);
                                         //this.chapterTime = chapter.substring(1);
                                     }
                                     if (typeof rawData.playback_caption !== 'undefined') {
                                         let newNameInput = rawData.playback_caption.split('of');
                                         let nameInput = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
                                         let numberOfChapters = nameInput.replace(/[^0-9]/g, '');
-                                        this.newCurrentChapter(Object.values(newChapter)[0] + ' ' + Object.values(newChapter)[1] + '/' + numberOfChapters + ' ' + Object.values(newChapter)[Object.keys(newChapter).length - 1]);
+                                        this.newCurrentChapter(Object.values(newChapter)[0] + ' ' + chapter + '/' + numberOfChapters);
                                     }
                                     else {
                                         this.newCurrentChapter(rawData.playback_extra_caption);
@@ -2249,6 +2259,7 @@ class duneHDAccessory {
 
                             }
                         }
+                        /////////////Song track name
                         else {
                             if (typeof rawData.playback_caption !== 'undefined') {
                                 // this.platform.log('Playback url 14: ' + rawData.playback_caption);
@@ -2321,11 +2332,21 @@ class duneHDAccessory {
                     //////////Audio Lnaguage
                     this.newLanguageSelector(rawData['audio_track.' + rawData.audio_track + '.lang']);
                 }
+                else {
+
+                }
+            }
+
+            if (this.newPlayBackState === [false, false, false]) {
+                if (this.counter > 2) {
+                    this.mediaDetailsReset();
+                    this.counter = 0;
+                }
+                this.counter += 1
             }
             else {
 
             }
-
         }
 
 
