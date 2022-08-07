@@ -1,4 +1,6 @@
 # Changelog
+## [1.1.1] - 2022-08-07
+- Bug fixes and performance improvements
 ## [1.1.0] - 2022-06-04
 - Fixed Movie Title and Duration for Bluray and DVD movies
 ## [1.0.1] - 2022-05-10
