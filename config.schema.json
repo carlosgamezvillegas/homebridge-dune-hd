@@ -244,6 +244,12 @@
         "title": "Add the Recent button",
         "type": "boolean",
         "required": false
+      },
+      "changeDimmersToFan": {
+        "title": "Enable this if you would like to change the Volume and Movie Progress from Dimmers to Fans. This option is useful to avoid issues with Siri commands like 'Turn off all the lights'",
+        "type": "boolean",
+        "required": false,
+        "default": false
       }
     }
   },
@@ -310,6 +316,9 @@
         },
         {
           "key": "movieControl"
+        },
+        {
+          "key": "changeDimmersToFan"
         }
       ]
     },
