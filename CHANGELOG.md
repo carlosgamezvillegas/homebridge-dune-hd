@@ -1,4 +1,9 @@
 # Changelog
+## [1.2.2] - 2023-01-26
+- Bug fixes 
+## [1.2.0] - 2023-08-31
+### Added
+-Added the ability to change the Volume and Movie Progress controls from Dimmers to Fans
 ## [1.1.1] - 2022-08-07
 - Bug fixes and performance improvements
 ## [1.1.0] - 2022-06-04
