@@ -60,6 +60,11 @@
         "type": "boolean",
         "required": false
       },
+      "remainMovieTimer": {
+        "title": "Add Movie Timer",
+        "type": "boolean",
+        "required": false
+      },
       "movieControl": {
         "title": "Add Video/Song Progress as a dimmer",
         "type": "boolean",
@@ -250,6 +255,12 @@
         "type": "boolean",
         "required": false,
         "default": false
+      },
+      "infoToMenu": {
+        "title": "Change Info button to Menu button",
+        "type": "boolean",
+        "required": false,
+        "default": false
       }
     }
   },
@@ -318,7 +329,13 @@
           "key": "movieControl"
         },
         {
+          "key": "remainMovieTimer"
+        },
+        {
           "key": "changeDimmersToFan"
+        },
+        {
+          "key": "infoToMenu"
         }
       ]
     },

@@ -6,7 +6,6 @@
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 [![homebridge-dune-hd](https://badgen.net/npm/v/homebridge-dune-hd?icon=npm)](https://www.npmjs.com/package/homebridge-dune-hd)
 [![mit-license](https://badgen.net/npm/license/lodash)](https://github.com/merdok/homebridge-dune-hd/blob/master/LICENSE)
-  
 </span>
 
 # What is this?
@@ -66,7 +65,7 @@ Example configuration:
 Make sure you change the IP Address the one the devices is currently using.
 
 
-### Adding the Dune HD to the Home app
+### Adding Dune HD to the Home app
 Since HomeKit expects only one Dune HD per bridge they will be declared as external accessories and acts as a bridge.  
 This means that a device will not appear in your Home app until you add it!
 

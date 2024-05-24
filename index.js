@@ -5,7 +5,7 @@ const request = require('http');
 const udp = require('dgram');
 
 module.exports = (api) => {
-    api.registerPlatform(PLATFORM_NAME, duneHDPlatform);
+    api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, duneHDPlatform, true);
 };
 //// Platform/////////////////////////////////////////////////////////////////////////////////////////////////
 class duneHDPlatform {
@@ -36,7 +36,7 @@ class duneHDPlatform {
         if (this.config.newPlatformUUID === false) {
             this.duneHDDevice =
             {
-                duneHDUniqueId: 'nicocata',
+                duneHDUniqueId: 'nicocatagameztanarro',
                 duneHDDisplayName: `${this.config.name}`
             };
         }
@@ -51,7 +51,7 @@ class duneHDPlatform {
         const uuid = this.api.hap.uuid.generate(this.duneHDDevice.duneHDUniqueId);
         this.log.debug('Adding new accessory:', this.duneHDDevice.duneHDDisplayName);
         const accessory = new this.api.platformAccessory(this.duneHDDevice.duneHDDisplayName, uuid);
-        accessory.category = this.api.hap.Accessory.Categories.TELEVISION;
+        accessory.category = this.api.hap.Accessory.Categories.TV_SET_TOP_BOX;
         accessory.context.device = this.duneHDDevice;
         new duneHDAccessory(this, accessory);
         this.api.publishExternalAccessories(PLUGIN_NAME, [accessory]);
@@ -64,17 +64,15 @@ class duneHDAccessory {
         this.accessory = accessory;
         this.config = platform.config;
         this.DUNEHD_IP = this.config.ip;
-        this.DUNEHD_PORT = 80;
+        this.DUNEHD_PORT = this.config.port || 80;
         this.statelessTimeOut = 1000;
         this.turnOffCommand = false;
         this.turnOnCommand = false;
         //////Initial Switch and sensors state///////////////////////////////////////////////////////////////////////////////////////////////
         this.powerState = false;
         this.playBackState = [false, false, false];
-        this.inputState = [false, false, false, false, false, false];
         this.powerStateTV = 0;
         this.currentVolume = 0;
-        this.targetVolume = 100;
         this.currentMuteState = true;
         this.currentVolumeSwitch = false;
         this.inputID = 1;
@@ -84,17 +82,20 @@ class duneHDAccessory {
         this.chapterTime = '';
         this.inputName = 'Media Name';
         this.mediaDuration = 'Runtime';
-        this.mediaElapse = 'Elapsed Time';
+        this.mediaInformation = 'Video Information';
         this.mediaChapter = 'Current Chapter';
         this.mediaAudioFormat = 'Audio Format';
         this.language = 'Audio Language';
+        this.subtitleLanguage = '';
         this.showState = false;
         this.httpNotResponding = 0;
+        this.turnOffAllUsed = false;
         this.counter = 0;
         /////MovieConstants
         this.currentMovieProgress = 0;
         this.currentMovieProgressState = false;
         this.movieElapsed = 0;
+        this.currentMoviePosition = 0;
         this.movieRemaining = 0;
         this.bluryaDVD = false;
         ////Connection parameters
@@ -146,6 +147,8 @@ class duneHDAccessory {
         this.config.angleB = platform.config.angleB || false;
         this.config.recentB = platform.config.recentB || false;
         this.config.changeDimmersToFan = platform.config.changeDimmersToFan || false;
+        this.config.remainMovieTimer = platform.config.remainMovieTimer || false;
+        this.config.infoToMenu = platform.config.infoToMenu || false;
         ////Checking if the necessary information was given by the user////////////////////////////////////////////////////
         try {
             if (!this.config.ip) {
@@ -198,6 +201,10 @@ class duneHDAccessory {
                     }, 1000);
                 }
                 callback(null);
+            })
+            .on('get', (callback) => {
+                let currentValue = this.powerStateTV;
+                callback(null, currentValue);
             });
         this.tvService.getCharacteristic(this.platform.Characteristic.ClosedCaptions)
             .on('get', (callback) => {
@@ -285,8 +292,14 @@ class duneHDAccessory {
                         break;
                     }
                     case this.platform.Characteristic.RemoteKey.INFORMATION: {
-                        this.platform.log.debug('set Remote Key Pressed: INFORMATION');
-                        this.sending([this.pressedButton('INFO')]);
+                        if (this.config.infoToMenu) {
+                            this.platform.log.debug('set Remote Key Pressed: MENU');
+                            this.sending([this.pressedButton('POP-UP MENU')]);
+                        }
+                        else {
+                            this.platform.log.debug('set Remote Key Pressed: INFORMATION');
+                            this.sending([this.pressedButton('INFO')]);
+                        }
                         break;
                     }
                 }
@@ -299,33 +312,7 @@ class duneHDAccessory {
             .getCharacteristic(this.platform.Characteristic.ActiveIdentifier)
             .on('set', (inputIdentifier, callback) => {
                 this.platform.log.debug('Active Identifier set to:', inputIdentifier);
-                if (inputIdentifier === 999999) {
-                    this.newInputState([false, false, false, false, false, false]);
-                }
-                if (inputIdentifier === 0) {
-                    this.newInputState([false, false, false, false, false, false]);
-                }
-                else if (inputIdentifier === 1) {
-                    this.inputID = 1;
-                }
-                else if (inputIdentifier === 2) {
-                    this.inputID = 2;
-                }
-                else if (inputIdentifier === 3) {
-                    this.inputID = 3;
-                }
-                else if (inputIdentifier === 4) {
-                    this.inputID = 4;
-                }
-                else if (inputIdentifier === 5) {
-                    this.inputID = 5;
-                }
-                else if (inputIdentifier === 6) {
-                    this.inputID = 6;
-                }
-                else {
-                    //
-                }
+                this.inputID = inputIdentifier;
                 callback();
             })
             .on('get', (callback) => {
@@ -374,24 +361,24 @@ class duneHDAccessory {
                 callback(null, currentValue);
             });
         this.tvService.addLinkedService(this.runtime);
-        this.videoAudioElapseTime = this.accessory.getService('Elapsed Time') ||
-            this.accessory.addService(this.platform.Service.InputSource, 'Elapsed Time', 'CataNicoGaTa-1005')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 3)
-                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaElapse)
+        this.videoAudioElapseTime = this.accessory.getService('Video Information') ||
+            this.accessory.addService(this.platform.Service.InputSource, 'Video Information', 'CataNicoGaTa-1005')
+                .setCharacteristic(this.platform.Characteristic.Identifier, 4)
+                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaInformation)
                 .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
                 .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.HDMI)
                 .setCharacteristic(this.platform.Characteristic.TargetVisibilityState, false ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
                 .setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, false ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
         this.videoAudioElapseTime.getCharacteristic(this.platform.Characteristic.ConfiguredName)
             .on('get', (callback) => {
-                let currentValue = this.mediaElapse;
+                let currentValue = this.mediaInformation;
                 this.platform.log.debug('Getting' + currentValue);
                 callback(null, currentValue);
             });
         this.tvService.addLinkedService(this.videoAudioElapseTime);
         this.currentChaper = this.accessory.getService('Current Chapter') ||
             this.accessory.addService(this.platform.Service.InputSource, 'Current Chapter', 'CataNicoGaTa-4005')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 4)
+                .setCharacteristic(this.platform.Characteristic.Identifier, 3)
                 .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter)
                 .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
                 .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.HDMI)
@@ -463,6 +450,29 @@ class duneHDAccessory {
                 this.platform.log.debug('Playback State set to:', value);
                 callback(null);
             });
+        ////Things to remove
+        this.tvService.getCharacteristic(this.platform.Characteristic.Brightness)
+            .on('get', (callback) => {
+                let currentValue = this.currentVolume;
+                callback(null, currentValue);
+            })
+            .on('set', (newValue, callback) => {
+                this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
+                this.platform.log('Volume Value set to: ' + newValue);
+                callback(null);
+            });
+        this.tvService.getCharacteristic(this.platform.Characteristic.PictureMode)
+            .on('set', (newValue, callback) => {
+                if (newValue === 1) {
+                    this.sending([this.pressedButton('VOLUME DOWN')]);
+                }
+                if (newValue === 0) {
+                    this.sending([this.pressedButton('VOLUME UP')]);
+                }
+                this.platform.log('Volume Value moved by: ' + newValue);
+                callback(null);
+            });
+        //////
         ////////Volume services for the Dune HD/////////////////////////////////////////////////////////////////////////////////
         this.speakerService = this.accessory.getService('Dune HD Volume Control') ||
             this.accessory.addService(this.platform.Service.TelevisionSpeaker, 'Dune HD Volume Control', 'CataNicoGaTa-20');
@@ -494,7 +504,6 @@ class duneHDAccessory {
                     this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=0&result_syntax=json"]);
                     this.platform.log('Volume Value set to: Unmute');
                 }
-
                 callback(null);
             });
         this.speakerService.addCharacteristic(this.platform.Characteristic.Volume)
@@ -511,161 +520,175 @@ class duneHDAccessory {
         /////Volume and Video/Movie Controls/////////////////////////////////////////////////////////////////////
         if (this.config.volume === true) {
             if (this.config.changeDimmersToFan === false) {
-            this.volumeDimmer = this.accessory.getService('Dune HD Volume') ||
-                this.accessory.addService(this.platform.Service.Lightbulb, 'Dune HD Volume', 'CataNicoGaT-98');
-            this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    let currentValue = this.currentVolumeSwitch;
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    if (newValue === true) {
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state_&mute=0&result_syntax=json"]);
-                        this.platform.log('Volume Value set to: Unmute');
-                    }
-                    if (newValue === false) {
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=1&result_syntax=json"]);
-                        this.platform.log('Volume Value set to: Mute');
-                    }
+                this.volumeDimmer = this.accessory.getService('Dune HD Volume') ||
+                    this.accessory.addService(this.platform.Service.Lightbulb, 'Dune HD Volume', 'CataNicoGaT-98');
+                this.volumeDimmer.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+                this.volumeDimmer.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Dune HD Volume');
+                this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On)
+                    .on('get', (callback) => {
+                        let currentValue = this.currentVolumeSwitch;
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        if (newValue === true) {
+                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state_&mute=0&result_syntax=json"]);
+                            this.platform.log('Volume Value set to: Unmute');
+                        }
+                        if (newValue === false) {
+                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=1&result_syntax=json"]);
+                            this.platform.log('Volume Value set to: Mute');
+                        }
 
-                    callback(null);
-                });
+                        callback(null);
+                    });
 
-            this.volumeDimmer.addCharacteristic(new this.platform.Characteristic.Brightness())
-                .on('get', (callback) => {
-                    let currentValue = this.currentVolume;
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
-                    this.platform.log('Volume Value set to: ' + newValue);
+                this.volumeDimmer.addCharacteristic(new this.platform.Characteristic.Brightness())
+                    .on('get', (callback) => {
+                        let currentValue = this.currentVolume;
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
+                        this.platform.log('Volume Value set to: ' + newValue);
 
-                    callback(null);
-                });
+                        callback(null);
+                    });
+            }
+            else {
+                this.volumeFan = this.accessory.getService('Dune HD Volume') ||
+                    this.accessory.addService(this.platform.Service.Fanv2, 'Dune HD Volume', 'CataNicoGaT-98F');
+                this.volumeFan.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+                this.volumeFan.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Dune HD Volume');
+                this.volumeFan.getCharacteristic(this.platform.Characteristic.Active)
+                    .on('get', (callback) => {
+                        let currentValue = 0;
+                        if (this.currentVolumeSwitch === true) {
+                            currentValue = 1;
+                        }
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        if (newValue === 1) {
+                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state_&mute=0&result_syntax=json"]);
+                            this.platform.log('Volume Value set to: Unmute');
+                        }
+                        if (newValue === 0) {
+                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=1&result_syntax=json"]);
+                            this.platform.log('Volume Value set to: Mute');
+                        }
+
+                        callback(null);
+                    });
+
+                this.volumeFan.addCharacteristic(new this.platform.Characteristic.RotationSpeed)
+                    .on('get', (callback) => {
+                        let currentValue = this.currentVolume;
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
+                        this.platform.log('Volume Value set to: ' + newValue);
+
+                        callback(null);
+                    });
+            }
         }
-        else {
-            this.volumeFan = this.accessory.getService('Dune HD Volume') ||
-                this.accessory.addService(this.platform.Service.Fanv2, 'Dune HD Volume', 'CataNicoGaT-98F');
-            this.volumeFan.getCharacteristic(this.platform.Characteristic.Active)
-                .on('get', (callback) => {
-                    let currentValue = 0;
-                    if (this.currentVolumeSwitch === true) {
-                        currentValue = 1;
-                    }
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    if (newValue === 1) {
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state_&mute=0&result_syntax=json"]);
-                        this.platform.log('Volume Value set to: Unmute');
-                    }
-                    if (newValue === 0) {
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=1&result_syntax=json"]);
-                        this.platform.log('Volume Value set to: Mute');
-                    }
-
-                    callback(null);
-                });
-
-            this.volumeFan.addCharacteristic(new this.platform.Characteristic.RotationSpeed)
-                .on('get', (callback) => {
-                    let currentValue = this.currentVolume;
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
-                    this.platform.log('Volume Value set to: ' + newValue);
-
-                    callback(null);
-                });
+        if (this.config.movieControl === true) {
+            if (this.config.changeDimmersToFan === false) {
+                this.movieControlL = this.accessory.getService('Media Progress') ||
+                    this.accessory.addService(this.platform.Service.Lightbulb, 'Media Progress', 'CataNicoGaTa-301');
+                this.movieControlL.setCharacteristic(this.platform.Characteristic.Name, 'Media Progress');
+                this.movieControlL.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+                this.movieControlL.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Media Progress');
+                this.movieControlL.getCharacteristic(this.platform.Characteristic.On)
+                    .on('get', (callback) => {
+                        let currentValue = this.currentMovieProgressState;
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        this.platform.log('Movie progress state set to: ' + newValue);
+                        callback(null);
+                    });
+                this.movieControlL.addCharacteristic(new this.platform.Characteristic.Brightness())
+                    .on('get', (callback) => {
+                        let currentValue = this.currentMovieProgress;
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        let newSendValue = Math.round(newValue * (this.movieRemaining) / 100);
+                        if (newSendValue > this.movieRemaining) {
+                            newSendValue = this.movieRemaining;
+                        }
+                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&position=" + newSendValue + "&result_syntax=json"]);
+                        this.newMovieTime(newSendValue);
+                        this.platform.log('Movie progress set to: ' + newValue + '%');
+                        callback(null);
+                    });
+            }
+            else {
+                this.movieControlF = this.accessory.getService('Media Progress') ||
+                    this.accessory.addService(this.platform.Service.Fanv2, 'Media Progress', 'CataNicoGaTa-301F');
+                this.movieControlF.setCharacteristic(this.platform.Characteristic.Name, 'Media Progress');
+                this.movieControlF.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+                this.movieControlF.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Media Progress');
+                this.movieControlF.getCharacteristic(this.platform.Characteristic.Active)
+                    .on('get', (callback) => {
+                        let currentValue = 0;
+                        if (this.currentMovieProgressState === true) {
+                            currentValue = 1;
+                        }
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        this.platform.log('Movie progress state set to: ' + newValue);
+                        callback(null);
+                    });
+                this.movieControlF.addCharacteristic(new this.platform.Characteristic.RotationSpeed)
+                    .on('get', (callback) => {
+                        let currentValue = this.currentMovieProgress;
+                        callback(null, currentValue);
+                    })
+                    .on('set', (newValue, callback) => {
+                        let newSendValue = Math.round(newValue * (this.movieRemaining) / 100);
+                        if (newSendValue > this.movieRemaining) {
+                            newSendValue = this.movieRemaining;
+                        }
+                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&position=" + newSendValue + "&result_syntax=json"]);
+                        this.newMovieTime(newSendValue);
+                        this.platform.log('Movie progress set to: ' + newValue + '%');
+                        callback(null);
+                    });
+            }
         }
-    }
-    if (this.config.movieControl === true) {
-        if (this.config.changeDimmersToFan === false) {
-            this.movieControlL = this.accessory.getService('Media Progress') ||
-                this.accessory.addService(this.platform.Service.Lightbulb, 'Media Progress', 'CataNicoGaTa-301');
-            this.movieControlL.setCharacteristic(this.platform.Characteristic.Name, 'Media Progress');
-            this.movieControlL.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    let currentValue = this.currentMovieProgressState;
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    this.platform.log('Movie progress state set to: ' + newValue);
-                    callback(null);
-                });
-            this.movieControlL.addCharacteristic(new this.platform.Characteristic.Brightness())
-                .on('get', (callback) => {
-                    let currentValue = this.currentMovieProgress;
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    let newSendValue = Math.round(newValue * (this.movieRemaining) / 100);
-                    let totalMovieTime = this.movieRemaining;
-                    if (newSendValue > totalMovieTime) {
-                        newSendValue = totalMovieTime;
-                    }
-                    this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&position=" + newSendValue + "&result_syntax=json"]);
-                    this.newMovieTime(newSendValue);
-                    this.platform.log('Movie progress set to: ' + newValue + '%');
-                    callback(null);
-                });
-        }
-        else {
-            this.movieControlF = this.accessory.getService('Media Progress') ||
-                this.accessory.addService(this.platform.Service.Fanv2, 'Media Progress', 'CataNicoGaTa-301F');
-            this.movieControlF.setCharacteristic(this.platform.Characteristic.Name, 'Media Progress');
-            this.movieControlF.getCharacteristic(this.platform.Characteristic.Active)
-                .on('get', (callback) => {
-                    let currentValue = 0;
-                    if (this.currentMovieProgressState === true) {
-                        currentValue = 1;
-                    }
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    this.platform.log('Movie progress state set to: ' + newValue);
-                    callback(null);
-                });
-            this.movieControlF.addCharacteristic(new this.platform.Characteristic.RotationSpeed)
-                .on('get', (callback) => {
-                    let currentValue = this.currentMovieProgress;
-                    callback(null, currentValue);
-                })
-                .on('set', (newValue, callback) => {
-                    let newSendValue = Math.round(newValue * (this.movieRemaining) / 100);
-                    let totalMovieTime = this.movieRemaining;
-                    if (newSendValue > totalMovieTime) {
-                        newSendValue = totalMovieTime;
-                    }
-                    this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&position=" + newSendValue + "&result_syntax=json"]);
-                    this.newMovieTime(newSendValue);
-                    this.platform.log('Movie progress set to: ' + newValue + '%');
-                    callback(null);
-                });
-        }
-    }
         /////////////Addtional Services////////////////////////////////////////////////////////////////////////////////////
         if (this.config.powerB === true) {
             this.service = this.accessory.getService(this.platform.Service.Switch) || this.accessory.addService(this.platform.Service.Switch);
             this.service.setCharacteristic(this.platform.Characteristic.Name, `${accessory.context.device.duneHDDisplayName} Power Switch`);
             this.service.updateCharacteristic(this.platform.Characteristic.Name, `${accessory.context.device.duneHDDisplayName} Power Switch`);
+            this.service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, `${accessory.context.device.duneHDDisplayName} Power Switch`);
             this.service.getCharacteristic(this.platform.Characteristic.On)
                 .on('set', this.setOn.bind(this))
                 .on('get', this.getOn.bind(this));
         };
         this.play = this.accessory.getService('Play') ||
             this.accessory.addService(this.platform.Service.Switch, 'Play', 'CataNicoGaTa-10');
+        this.play.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+        this.play.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Play');
         this.play.getCharacteristic(this.platform.Characteristic.On)
             .on('get', this.playSwitchStateGet.bind(this))
             .on('set', this.playSwitchStateSet.bind(this));
         this.pause = this.accessory.getService('Pause') ||
             this.accessory.addService(this.platform.Service.Switch, 'Pause', 'CataNicoGaTa-11');
+        this.pause.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+        this.pause.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Pause');
         this.pause.getCharacteristic(this.platform.Characteristic.On)
             .on('get', this.pauseSwitchStateGet.bind(this))
             .on('set', this.pauseSwitchStateSet.bind(this));
         this.stop = this.accessory.getService('Stop') ||
             this.accessory.addService(this.platform.Service.Switch, 'Stop', 'CataNicoGaTa-12');
+        this.stop.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+        this.stop.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Stop');
         this.stop.getCharacteristic(this.platform.Characteristic.On)
             .on('get', this.stopSwitchStateGet.bind(this))
             .on('set', this.stopSwitchStateSet.bind(this));
@@ -675,6 +698,8 @@ class duneHDAccessory {
         if (this.config.cursorUpB === true) {
             this.cursorUp = this.accessory.getService('Cursor Up') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Cursor Up', 'CataNicoGaTa-31');
+            this.cursorUp.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.cursorUp.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Up');
             this.cursorUp.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Cursor Up GET On');
@@ -695,6 +720,8 @@ class duneHDAccessory {
         if (this.config.cursorDownB === true) {
             this.cursorDown = this.accessory.getService('Cursor Down') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Cursor Down', 'CataNicoGaTa-32');
+            this.cursorDown.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.cursorDown.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Down');
             this.cursorDown.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Cursor Down GET On');
@@ -715,6 +742,8 @@ class duneHDAccessory {
         if (this.config.cursorLeftB === true) {
             this.cursorLeft = this.accessory.getService('Cursor Left') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Cursor Left', 'CataNicoGaTa-33');
+            this.cursorLeft.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.cursorLeft.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Left');
             this.cursorLeft.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Cursor Left GET On');
@@ -735,6 +764,8 @@ class duneHDAccessory {
         if (this.config.cursorRightB === true) {
             this.cursorRight = this.accessory.getService('Cursor Right') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Cursor Right', 'CataNicoGaTa-34');
+            this.cursorRight.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.cursorRight.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Right');
             this.cursorRight.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Cursor Right GET On');
@@ -755,6 +786,8 @@ class duneHDAccessory {
         if (this.config.cursorEnterB === true) {
             this.cursorEnter = this.accessory.getService('Cursor Enter') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Cursor Enter', 'CataNicoGaTa-35');
+            this.cursorEnter.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.cursorEnter.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Enter');
             this.cursorEnter.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Cursor Enter GET On');
@@ -775,6 +808,8 @@ class duneHDAccessory {
         if (this.config.searchB === true) {
             this.searchB = this.accessory.getService('Search') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Search', 'CataNicoGaTa-36');
+            this.searchB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.searchB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Search');
             this.searchB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Search GET On');
@@ -795,6 +830,8 @@ class duneHDAccessory {
         if (this.config.backButtonB === true) {
             this.backButton = this.accessory.getService('Back') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Back', 'CataNicoGaTa-37');
+            this.backButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.backButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Back');
             this.backButton.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Back GET On');
@@ -815,6 +852,8 @@ class duneHDAccessory {
         if (this.config.infoB === true) {
             this.infoButton = this.accessory.getService('Info') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Info', 'CataNicoGaTa-44');
+            this.infoButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.infoButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Info');
             this.infoButton.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Info GET On');
@@ -835,6 +874,8 @@ class duneHDAccessory {
         if (this.config.pageUpB === true) {
             this.pageUp = this.accessory.getService('Page Up') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Page Up', 'CataNicoGaTa-50');
+            this.pageUp.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.pageUp.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Page Up');
             this.pageUp.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Page Up GET On');
@@ -855,6 +896,8 @@ class duneHDAccessory {
         if (this.config.pageDownB === true) {
             this.pageDown = this.accessory.getService('Page Down') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Page Down', 'CataNicoGaTa-51');
+            this.pageDown.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.pageDown.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Page Down');
             this.pageDown.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Page Down GET On');
@@ -875,6 +918,8 @@ class duneHDAccessory {
         if (this.config.popUpMenuB === true) {
             this.popUpMenu = this.accessory.getService('Pop-Up Menu') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Pop-Up Menu', 'CataNicoGaTa-52');
+            this.popUpMenu.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.popUpMenu.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Pop-Up Menu');
             this.popUpMenu.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Pop-Up Menu GET On');
@@ -896,6 +941,8 @@ class duneHDAccessory {
         if (this.config.mediaButtons === true) {
             this.previous = this.accessory.getService('Previous') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Previous', 'CataNicoGaTa-38');
+            this.previous.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.previous.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Previous');
             this.previous.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Previous GET On');
@@ -914,6 +961,8 @@ class duneHDAccessory {
                 });
             this.next = this.accessory.getService('Next') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Next', 'CataNicoGaTa-39');
+            this.next.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.next.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Next');
             this.next.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Next GET On');
@@ -932,6 +981,8 @@ class duneHDAccessory {
                 });
             this.rewindButton = this.accessory.getService('Rewind') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Rewind', 'CataNicoGaTa-46');
+            this.rewindButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.rewindButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Rewind');
             this.rewindButton.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Rewind GET On');
@@ -950,6 +1001,8 @@ class duneHDAccessory {
                 });
             this.forwardButton = this.accessory.getService('Forward') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Forward', 'CataNicoGaTa-80');
+            this.forwardButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.forwardButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Forward');
             this.forwardButton.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Forward GET On');
@@ -971,6 +1024,8 @@ class duneHDAccessory {
         if (this.config.redB === true) {
             this.red = this.accessory.getService('Red') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Red', 'CataNicoGaTa-53');
+            this.red.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.red.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Red');
             this.red.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Red GET On');
@@ -991,6 +1046,8 @@ class duneHDAccessory {
         if (this.config.greenB === true) {
             this.green = this.accessory.getService('Green') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Green', 'CataNicoGaTa-54');
+            this.green.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.green.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Green');
             this.green.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Green GET On');
@@ -1011,6 +1068,8 @@ class duneHDAccessory {
         if (this.config.blueB === true) {
             this.blue = this.accessory.getService('Blue') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Blue', 'CataNicoGaTa-55');
+            this.blue.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.blue.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Blue');
             this.blue.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Blue GET On');
@@ -1031,6 +1090,8 @@ class duneHDAccessory {
         if (this.config.yellowB === true) {
             this.yellow = this.accessory.getService('Yellow') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Yellow', 'CataNicoGaTa-56');
+            this.yellow.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.yellow.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Yellow');
             this.yellow.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Yellow GET On');
@@ -1051,6 +1112,8 @@ class duneHDAccessory {
         if (this.config.audioB === true) {
             this.audio = this.accessory.getService('Audio') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Audio', 'CataNicoGaTa-57');
+            this.audio.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.audio.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Audio');
             this.audio.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Audio GET On');
@@ -1071,6 +1134,8 @@ class duneHDAccessory {
         if (this.config.subtitleB === true) {
             this.subtitle = this.accessory.getService('Subtitle') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Subtitle', 'CataNicoGaTa-58');
+            this.subtitle.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.subtitle.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Subtitle');
             this.subtitle.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Subtitle GET On');
@@ -1091,6 +1156,8 @@ class duneHDAccessory {
         if (this.config.repeatB === true) {
             this.repeat = this.accessory.getService('Repeat') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Repeat', 'CataNicoGaTa-63');
+            this.repeat.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.repeat.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Repeat');
             this.repeat.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Repeat GET On');
@@ -1112,6 +1179,8 @@ class duneHDAccessory {
 
             this.pip = this.accessory.getService('Shuffle-PIP') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Shuffle-PIP', 'CataNicoGaTa-64');
+            this.pip.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.pip.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Shuffle-PIP');
             this.pip.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Shuffle-PIP GET On');
@@ -1132,6 +1201,8 @@ class duneHDAccessory {
         if (this.config.selectB === true) {
             this.selectB = this.accessory.getService('Select') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Select', 'CataNicoGaTa-65');
+            this.selectB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.selectB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Select');
             this.selectB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Select GET On');
@@ -1153,6 +1224,8 @@ class duneHDAccessory {
         if (this.config.muteB === true) {
             this.mute = this.accessory.getService('Mute') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Mute', 'CataNicoGaTa-9001');
+            this.mute.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.mute.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Mute');
             this.mute.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Mute GET On');
@@ -1173,6 +1246,8 @@ class duneHDAccessory {
         if (this.config.recordB === true) {
             this.record = this.accessory.getService('Record') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Record', 'CataNicoGaTa-9002');
+            this.record.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.record.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Record');
             this.record.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Record GET On');
@@ -1193,6 +1268,8 @@ class duneHDAccessory {
         if (this.config.movieB === true) {
             this.movie = this.accessory.getService('Movie') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Movie', 'CataNicoGaTa-9003');
+            this.movie.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.movie.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Movie');
             this.movie.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Movie GET On');
@@ -1213,6 +1290,8 @@ class duneHDAccessory {
         if (this.config.musicB === true) {
             this.music = this.accessory.getService('Music') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Music', 'CataNicoGaTa-9004');
+            this.music.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.music.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Music');
             this.music.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Music GET On');
@@ -1233,6 +1312,8 @@ class duneHDAccessory {
         if (this.config.tvB === true) {
             this.tvB = this.accessory.getService('TV') ||
                 this.accessory.addService(this.platform.Service.Switch, 'TV', 'CataNicoGaTa-9005');
+            this.tvB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.tvB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'TV');
             this.tvB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('TV GET On');
@@ -1253,6 +1334,8 @@ class duneHDAccessory {
         if (this.config.ejectB === true) {
             this.ejectB = this.accessory.getService('Eject') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Eject', 'CataNicoGaTa-9006');
+            this.ejectB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.ejectB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Eject');
             this.ejectB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Eject GET On');
@@ -1273,6 +1356,8 @@ class duneHDAccessory {
         if (this.config.modeB === true) {
             this.modeB = this.accessory.getService('Mode') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Mode', 'CataNicoGaTa-9007');
+            this.modeB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.modeB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Mode');
             this.modeB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Mode GET On');
@@ -1293,6 +1378,8 @@ class duneHDAccessory {
         if (this.config.slowB === true) {
             this.slowB = this.accessory.getService('Slow') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Slow', 'CataNicoGaTa-9008');
+            this.slowB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.slowB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Slow');
             this.slowB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Slow GET On');
@@ -1313,6 +1400,8 @@ class duneHDAccessory {
         if (this.config.mouseB === true) {
             this.mouseB = this.accessory.getService('Mouse') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Mouse', 'CataNicoGaTa-9009');
+            this.mouseB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.mouseB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Mouse');
             this.mouseB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Mouse GET On');
@@ -1333,6 +1422,8 @@ class duneHDAccessory {
         if (this.config.clearB === true) {
             this.clear = this.accessory.getService('Clear') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Clear', 'CataNicoGaTa-40');
+            this.clear.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.clear.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Clear');
             this.clear.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Clear GET On');
@@ -1353,6 +1444,8 @@ class duneHDAccessory {
         if (this.config.zoomB === true) {
             this.zoom = this.accessory.getService('Zoom') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Zoom', 'CataNicoGaTa-60');
+            this.zoom.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.zoom.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Zoom');
             this.zoom.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Zoom GET On');
@@ -1373,6 +1466,8 @@ class duneHDAccessory {
         if (this.config.setupB === true) {
             this.setup = this.accessory.getService('Setup') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Setup', 'CataNicoGaTa-45');
+            this.setup.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.setup.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Setup');
             this.setup.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Setup GET On');
@@ -1393,6 +1488,8 @@ class duneHDAccessory {
         if (this.config.topMenuB === true) {
             this.topMenu = this.accessory.getService('Top Menu') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Top Menu', 'CataNicoGaTa-41');
+            this.topMenu.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.topMenu.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Top Menu');
             this.topMenu.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Top Menu GET On');
@@ -1413,6 +1510,8 @@ class duneHDAccessory {
         if (this.config.angleB === true) {
             this.angle = this.accessory.getService('Angle') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Angle', 'CataNicoGaTa-59');
+            this.angle.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.angle.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Angle');
             this.angle.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Angle GET On');
@@ -1433,6 +1532,8 @@ class duneHDAccessory {
         if (this.config.recentB === true) {
             this.recentB = this.accessory.getService('Recent') ||
                 this.accessory.addService(this.platform.Service.Switch, 'Recent', 'CataNicoGaTa-X09');
+            this.recentB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.recentB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Recent');
             this.recentB.getCharacteristic(this.platform.Characteristic.On)
                 .on('get', (callback) => {
                     this.platform.log.debug('Recent GET On');
@@ -1450,8 +1551,43 @@ class duneHDAccessory {
                     callback(null);
                 });
         }
-        ///////////////Clean up. Delete services not in used////////////////////////////////
+        if (this.config.remainMovieTimer) {
+            this.movieTimer = accessory.getService(this.platform.Service.Valve) || accessory.addService(this.platform.Service.Valve, 'Dune HD Movie Timer', 'Movie Timer');
+            this.movieTimer.setCharacteristic(this.platform.Characteristic.Name, 'Dune HD Movie Timer');
+            this.movieTimer.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+            this.movieTimer.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Dune HD Movie Timer');
+            this.movieTimer.setCharacteristic(this.platform.Characteristic.ValveType, this.platform.Characteristic.ValveType.IRRIGATION);
+            this.movieTimer.getCharacteristic(this.platform.Characteristic.Active)
+                .on('get', (callback) => {
+                    let currentValue = this.currentMovieProgressState ? 1 : 0
+                    callback(null, currentValue);
+                })
+                .on('set', (value, callback) => {
+                    callback(null);
+                });
+            this.movieTimer.setCharacteristic(this.platform.Characteristic.InUse, this.platform.Characteristic.InUse.NOT_IN_USE);
+            this.movieTimer.getCharacteristic(this.platform.Characteristic.RemainingDuration)
+                .on('get', (callback) => {
+                    let currentValue = this.movieElapsed;
+                    callback(null, currentValue);
+                })
+                .setProps({
+                    maxValue: 86400 / 4, // 1 day
+                });
+            this.movieTimer.getCharacteristic(this.platform.Characteristic.SetDuration)
+                .on('get', (callback) => {
+                    let currentValue = this.movieRemaining;
+                    callback(null, currentValue);
+                })
+                .setProps({
+                    maxValue: 86400 / 4, // 1 day
+                });
 
+        }
+        ///////////////Clean up. Delete services not in used////////////////////////////////
+        if (this.config.remainMovieTimer === false) {
+            this.accessory.removeService(this.movieTimer);
+        }
         if (this.config.powerB === false) {
             this.accessory.removeService(this.service);
         }
@@ -1595,7 +1731,10 @@ class duneHDAccessory {
             if (this.turnOffCommand === false && this.turnOnCommand === false) {
                 this.sending([this.query('GET DEVICE INFO')]);
                 if (this.httpNotResponding >= this.reconnectionTry) {
-                    this.turnOffAll();
+                    if (this.turnOffAllUsed === false) {
+                        this.turnOffAll();
+                        this.turnOffAllUsed = true;
+                    }
                 }
                 /*
                                 this.platform.log('Updating');
@@ -1627,32 +1766,34 @@ class duneHDAccessory {
                 }
                 if (this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.inputName) {
                     this.platform.log.debug('Updating Title');
-                    this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
+                    //  this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
                     this.videoAudioTitle.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName);
                 }
                 if (this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaDuration) {
                     this.platform.log.debug('Updating Runtime');
                     this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration);
-                    this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaDuration);
+                    //this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaDuration);
                 }
                 if (this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaChapter) {
                     this.platform.log.debug('Updating Current Chapter');
-                    this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
+                    // this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
                     this.currentChaper.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter);
                 }
                 if (this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaAudioFormat) {
                     this.platform.log.debug('Updating Audio Format');
-                    this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
+                    //  this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
                     this.audioFormat.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat);
                 }
                 if (this.audioLanguage.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.language) {
                     this.platform.log.debug('Updating Language');
-                    this.audioLanguage.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.language);
+                    //this.audioLanguage.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.language);
                     this.audioLanguage.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.language);
                 }
-
-                //this.videoAudioElapseTime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaElapse);
-                //this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaElapse);
+                if (this.videoAudioElapseTime.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaInformation) {
+                    this.platform.log.debug('Updating Video Information');
+                    //this.videoAudioElapseTime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaInformation);
+                    this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaInformation);
+                }
             }
             else {
                 setTimeout(() => {
@@ -1744,7 +1885,6 @@ class duneHDAccessory {
             this.platform.log(`Sending: ${this.commandName(commandPress)} Command`);
         }
     }
-
     ///////Send HTTP command///////////////////////////
     sending(url) {
         this.platform.log.debug(url);
@@ -1783,7 +1923,6 @@ class duneHDAccessory {
             // console.error(`Got error: ${e.message}`);
         });
     }
-
     //////////Current Status//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     newVolumeStatus(newVolumeNum) {
         if (this.turnOffCommand !== true || newVolumeNum === 0) {
@@ -1800,20 +1939,20 @@ class duneHDAccessory {
                 }
                 this.speakerService.updateCharacteristic(this.platform.Characteristic.Volume, this.currentVolume);
                 this.speakerService.updateCharacteristic(this.platform.Characteristic.Mute, this.currentMuteState);
-                this.speakerService.getCharacteristic(this.platform.Characteristic.Volume).updateValue(this.currentVolume);
-                this.speakerService.getCharacteristic(this.platform.Characteristic.Mute).updateValue(this.currentMuteState)
+                // this.speakerService.getCharacteristic(this.platform.Characteristic.Volume).updateValue(this.currentVolume);
+                // this.speakerService.getCharacteristic(this.platform.Characteristic.Mute).updateValue(this.currentMuteState)
                 if (this.config.volume === true) {
                     if (this.config.changeDimmersToFan === false) {
                         this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentVolume);
-                        this.volumeDimmer.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentVolume);
+                        //this.volumeDimmer.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentVolume);
                         this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.On, this.currentVolumeSwitch);
-                        this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentVolumeSwitch);
+                        //this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentVolumeSwitch);
                     }
                     else {
                         this.volumeFan.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.currentVolume);
-                        this.volumeFan.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentVolume);
+                        // this.volumeFan.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentVolume);
                         this.volumeFan.updateCharacteristic(this.platform.Characteristic.Active, this.currentVolumeSwitch === true ? 1 : 0);
-                        this.volumeFan.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentVolumeSwitch === true ? 1 : 0);
+                        // this.volumeFan.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentVolumeSwitch === true ? 1 : 0);
                     }
                 }
             }
@@ -1822,45 +1961,48 @@ class duneHDAccessory {
 
     newAudioStatus(audio) {
         this.platform.log.debug(audio);
-        let newAduio = '';
+        let newAudio = '';
         if (audio.includes('Digital Plus')) {
-            newAduio = 'Dolby Digital Plus';
+            newAudio = 'Dolby Digital Plus - Atmos';
         }
         else if (audio.includes('Dolby Digital')) {
-            newAduio = 'Dolby Digital';
+            newAudio = 'Dolby Digital';
         }
         else if (audio.includes('TrueHD')) {
-            newAduio = 'Dolby TrueHD - Atmos';
+            newAudio = 'Dolby TrueHD - Atmos';
         }
         else if (audio.includes('DTS-HD High') || audio.includes('DTS HD High')) {
-            newAduio = 'DTS-HD High Resolution';
+            newAudio = 'DTS-HD High Resolution';
         }
         else if (audio.includes('DTS HD Master') || audio.includes('DTS HD MA')) {
-            newAduio = 'DTS HD MA - DTS X';
+            newAudio = 'DTS HD MA - DTS X';
         }
         else if (audio.includes('DTS')) {
-            newAduio = 'DTS';
+            newAudio = 'DTS';
         }
         else if (audio.includes('LPCM')) {
-            newAduio = 'LPCM';
+            newAudio = 'LPCM';
         }
         else if (audio.includes('MPEG')) {
-            newAduio = 'MPEG Audio';
+            newAudio = 'MPEG Audio';
 
         }
         else if (audio.includes('CD Audio')) {
-            newAduio = 'CD Audio';
+            newAudio = 'CD Audio';
 
         }
         else {
-            newAduio = audio;
+            newAudio = audio;
 
         }
-        this.newAudioFormat(newAduio);
+        this.newAudioFormat(newAudio);
     }
 
     newInputName(newName) {
         if (typeof newName !== 'undefined') {
+            if (newName.includes('.iso') || newName.includes('.ISO') || newName.includes('.MKV') || newName.includes('.mkv') || newName.includes('.MP4') || newName.includes('.mp4') || newName.includes('.MP3') || newName.includes('.mp3')) {
+                newName = newName.substring(0, newName.length - 4);
+            }
             if (newName.length >= 64) {
                 newName = newName.slice(0, 60) + "...";
             }
@@ -1869,7 +2011,7 @@ class duneHDAccessory {
                 this.inputName = newName;
                 this.platform.log.debug(this.inputName);
                 this.videoAudioTitle.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName);
-                this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
+                // this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
             }
         }
 
@@ -1877,13 +2019,26 @@ class duneHDAccessory {
     newInputDuration(newDuration) {
         if (typeof newDuration !== 'undefined') {
             this.platform.log.debug('New input duraiton: ' + newDuration);
-            if (this.mediaDuration !== newDuration) {
+            if (!newDuration.includes('Runtime')) {
+                let hourMintue = ''
+                if (this.movieRemaining > 3600) {
+                    hourMintue = 'Hours';
+                }
+                else if (this.movieRemaining == 3600) {
+                    hourMintue = 'Hour';
+                }
+                else {
+                    hourMintue = 'Minutes';
+                }
+                this.mediaDuration = 'Runtime: ' + newDuration + ' ' + hourMintue;
+            }
+            else {
                 this.mediaDuration = newDuration;
-                this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration);
-                this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaDuration);
+            }
+            if (this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaDuration) {
+                this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration)
             }
         }
-
     }
     newCurrentChapter(currentChapter) {
         if (typeof currentChapter !== 'undefined') {
@@ -1894,24 +2049,23 @@ class duneHDAccessory {
             if (this.mediaChapter !== currentChapter) {
                 this.mediaChapter = currentChapter;
                 this.currentChaper.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter);
-                this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
+                //this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
                 this.currentChaper.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
                 this.currentChaper.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
             }
         }
     }
-    newElapsedTime(elapsedTime) {
-        /*
-        if(typeof elapsedTime !=='undefined'){
-        this.platform.log.debug(elapsedTime);
-        if (this.mediaElapse !== elapsedTime) {
-            this.mediaElapse = elapsedTime;
-            this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaElapse);
-            this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
-            this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+    newVideoInformation(videoFormat) {
+        if (typeof videoFormat !== 'undefined') {
+            this.platform.log.debug(videoFormat);
+            if (this.mediaInformation !== videoFormat) {
+                this.mediaInformation = videoFormat;
+                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaInformation);
+                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
+                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
         }
-    }
-        */
+
     }
     newAudioFormat(audioType) {
         if (typeof audioType !== 'undefined') {
@@ -1919,7 +2073,7 @@ class duneHDAccessory {
             if (this.mediaAudioFormat !== audioType) {
                 this.mediaAudioFormat = audioType;
                 this.audioFormat.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat);
-                this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
+                //this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
                 this.audioFormat.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
                 this.audioFormat.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
             }
@@ -1936,7 +2090,7 @@ class duneHDAccessory {
         else if (langSelector.includes('cat')) {
             correctLanguage = 'Catalan';
         }
-        else if (langSelector.includes('chi')) {
+        else if (langSelector.includes('chi') || langSelector.includes('zho')) {
             correctLanguage = 'Chinese';
         }
         else if (langSelector.includes('ces') || langSelector.includes('cze')) {
@@ -2012,9 +2166,10 @@ class duneHDAccessory {
             correctLanguage = 'Language Undefined';
         }
         else {
-            correctLanguage = langSelector
+            correctLanguage = 'Language Undefined';
         }
-        this.newLanguage(correctLanguage);
+        return correctLanguage;
+
     }
     newLanguage(lang) {
         if (typeof lang !== 'undefined') {
@@ -2047,20 +2202,32 @@ class duneHDAccessory {
                 if (this.config.changeDimmersToFan === false) {
                     if (this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).value !== this.currentMovieProgress) {
                         this.movieControlL.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentMovieProgress);
-                        this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentMovieProgress);
+                        // this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentMovieProgress);
                         this.movieControlL.updateCharacteristic(this.platform.Characteristic.On, this.currentMovieProgressState);
-                        this.movieControlL.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentMovieProgressState);
+                        //this.movieControlL.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentMovieProgressState);
                     }
                 }
                 else {
                     if (this.movieControlF.getCharacteristic(this.platform.Characteristic.RotationSpeed).value !== this.currentMovieProgress) {
                         this.movieControlF.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.currentMovieProgress);
-                        this.movieControlF.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentMovieProgress);
+                        // this.movieControlF.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentMovieProgress);
                         this.movieControlF.updateCharacteristic(this.platform.Characteristic.Active, this.currentMovieProgressState === true ? 1 : 0);
-                        this.movieControlF.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentMovieProgressState === true ? 1 : 0);
+                        //this.movieControlF.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentMovieProgressState === true ? 1 : 0);
                     }
                 }
-              }
+            }
+            if (this.config.remainMovieTimer) {
+                if (this.movieTimer.getCharacteristic(this.platform.Characteristic.Active).value != this.currentMovieProgressState ? 1 : 0) {
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.Active, this.currentMovieProgressState ? 1 : 0);
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.InUse, this.currentMovieProgressState ? 1 : 0);
+                }
+                if (this.movieElapsed !== this.movieTimer.getCharacteristic(this.platform.Characteristic.RemainingDuration).value) {
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.RemainingDuration, this.movieElapsed);
+                }
+                if (this.movieRemaining !== this.movieTimer.getCharacteristic(this.platform.Characteristic.SetDuration).value) {
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.SetDuration, this.movieRemaining);
+                }
+            }
         }
     }
     newPowerState(newValue) {
@@ -2074,17 +2241,17 @@ class duneHDAccessory {
             if (this.powerSate !== newValue) {
                 this.powerState = newValue;
                 this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
-                this.tvService.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.powerStateTV);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.powerStateTV);
                 if (this.config.powerB === true) {
                     this.service.updateCharacteristic(this.platform.Characteristic.On, this.powerState);
-                    this.service.getCharacteristic(this.platform.Characteristic.On).updateValue(this.powerState);
+                    //this.service.getCharacteristic(this.platform.Characteristic.On).updateValue(this.powerState);
                 }
             }
         }
     }
     newPlayBackState(newPlay) {
         this.playBackState = newPlay;
-        if (this.turnOffCommand === false || this.playBackState === [false, false, false]) {
+        if (this.turnOffCommand == false || this.playBackState == [false, false, false]) {
             if (this.playBackState[0] === true) {
                 this.mediaState = 0;
             }
@@ -2103,58 +2270,34 @@ class duneHDAccessory {
             }
             if (this.play.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[0]) {
                 this.play.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[0]);
-                this.play.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[0]);
+                // this.play.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[0]);
                 this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-                this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
             }
             if (this.pause.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[1]) {
                 this.pause.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[1]);
-                this.pause.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[1]);
+                // this.pause.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[1]);
                 this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-                this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
             }
             if (this.stop.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[2]) {
                 this.stop.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[2]);
-                this.stop.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[2]);
+                //this.stop.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[2]);
                 this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-                this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
             }
         }
     }
     newInputState(newInput) {
-        this.inputState = newInput;
-        if (this.inputState[0] === true) {
-            this.inputID = 1;
-        }
-        else if (this.inputState[1] === true) {
-            this.inputID = 2;
-        }
-        else if (this.inputState[2] === true) {
-            this.inputID = 3;
-        }
-        else if (this.inputState[3] === true) {
-            this.inputID = 4;
-        }
-        else if (this.inputState[4] === true) {
-            this.inputID = 5;
-        }
-        else if (this.inputState[5] === true) {
-            this.inputID = 6;
-        }
-        else if (this.inputState[0] === false && this.inputState[1] === false && this.inputState[2] === false
-            && this.inputState[3] === false && this.inputState[4] === false && this.inputState[5] === false) {
-            this.inputID = 0;
-        }
-        else {
-        }
+        this.inputID = newInput;
         this.tvService.updateCharacteristic(this.platform.Characteristic.ActiveIdentifier, this.inputID);
-        this.tvService.getCharacteristic(this.platform.Characteristic.ActiveIdentifier).updateValue(this.inputID);
+        // this.tvService.getCharacteristic(this.platform.Characteristic.ActiveIdentifier).updateValue(this.inputID);
     }
     /////////////////HTTP Event decoder
     httpEventDecoder(rawData, key) {
         //this.platform.log(`${key} Sent by HTTP`);
-        this.platform.log.debug(rawData);
-        this.platform.log.debug(key);
+        // this.platform.log(rawData);
+        //this.platform.log(key);
         if (key.includes('getDeviceInfo') || key.includes('volume') || key.includes('mute') || key.includes('position')) {
             this.platform.log.debug(`Response: ${this.commandName(key)} Command Executed`);
         }
@@ -2180,11 +2323,15 @@ class duneHDAccessory {
         }
         else if (key.includes('E11E')) {
             this.newPlayBackState([false, true, false]);
-
         }
+        //else if (rawData.player_state === 'standby' || typeof rawData.player_state === 'undefined' || rawData.player_state === 'safe_mode') {
         else if (rawData.player_state === 'standby' || typeof rawData.player_state === 'undefined') {
             if (this.turnOnCommand === false) {
-                this.turnOffAll();
+                if (this.turnOffAllUsed === false) {
+                    this.turnOffAll();
+                    this.turnOffAllUsed = true;
+                }
+
             }
             else {
                 setTimeout(() => {
@@ -2212,9 +2359,13 @@ class duneHDAccessory {
                     }
                 }
         */
-
-        else if (rawData.player_state !== 'standby') {
-
+        else if (rawData.player_state === 'navigator' && rawData.playback_mute === '1') {
+            if (this.turnOnCommand === false) {
+                this.turnOffAll();
+            }
+        }
+        else if (rawData.player_state !== 'standby' && typeof rawData.player_state !== 'undefined') {
+            this.turnOffAllUsed = false;
             if (this.turnOffCommand !== true) {
                 this.newPowerState(true);
             }
@@ -2226,7 +2377,6 @@ class duneHDAccessory {
                     this.newVolumeStatus(0);
                 }
             }
-
             ////////Playback Status.
             if (rawData.playback_state === "paused") {
                 this.newPlayBackState([false, true, false]);
@@ -2236,14 +2386,17 @@ class duneHDAccessory {
                 this.newPlayBackState([true, false, false]);
                 this.showState = true;
             }
+            // if (rawData.player_state === "bluray_playback" || rawData.player_state === "dvd_playback"||rawData.player_state === "file_playback") {
             if (rawData.player_state === "bluray_playback" || rawData.player_state === "dvd_playback") {
                 this.bluryaDVD = true;
                 this.newVolumeStatus(100);
                 if (rawData.playback_speed === "0") {
                     this.newPlayBackState([false, true, false]);
+                    //this.showState = true;
                 }
                 else {
                     this.newPlayBackState([true, false, false]);
+                    //this.showState = true;
                 }
                 if (typeof rawData.playback_caption !== 'undefined') {
                     this.newInputName(rawData.playback_caption);
@@ -2256,9 +2409,19 @@ class duneHDAccessory {
                     runtimeNumber = runtimeNumber.substring(1);
                 }
                 this.newInputDuration(runtimeNumber);
-                //////////////////Media Current position
-                // this.platform.log('Playback position: ' + rawData.playback_position);
-                this.newMovieTime(parseInt(rawData.playback_position));
+                if (typeof rawData.playback_duration != 'undefined' && typeof rawData.playback_position != 'undefined') {
+                    //////////////////Media Current position
+                    // this.platform.log('Playback position: ' + rawData.playback_position);
+                    this.currentMoviePosition = parseInt(rawData.playback_position);
+                    let movieElapsed1 = this.movieRemaining - this.currentMoviePosition
+                    if (movieElapsed1 < 0) {
+                        this.movieElapsed = 0;
+                    }
+                    else {
+                        this.movieElapsed = movieElapsed1
+                    }
+                    this.newMovieTime(parseInt(rawData.playback_position));
+                }
             }
             else if (typeof rawData.playback_state === 'undefined' || rawData.playback_state === 'deinitializing') {
                 this.newPlayBackState([false, false, false]);
@@ -2268,9 +2431,9 @@ class duneHDAccessory {
                 if (rawData.playback_state !== "initializing" && rawData.playback_state !== 'deinitializing' && rawData.playback_state !== 'seeking') {
                     //////////////////////Media Name///////////////////////////////
                     if (typeof rawData.playback_url !== 'undefined') {
-                        // this.platform.log('Playback url 1: ' + rawData.playback_url);
+                        //this.platform.log('Playback url 1: ' + rawData.playback_url);
                         if (rawData.is_video == '1') {
-                            this.platform.log.debug("Movie details")
+                            // this.platform.log("Movie details")
                             let newNameInput = rawData.playback_url.split('/');
                             let nameInput = '';
                             let rightInputName = Object.values(newNameInput)[Object.keys(newNameInput).length - 1];
@@ -2288,7 +2451,7 @@ class duneHDAccessory {
                             }
                             else {
 
-                                // this.platform.log('Playback url 13: ' + rawData.playback_caption);
+                                //this.platform.log('Playback url 13: ' + rawData.playback_caption);
 
                                 if (rightInputName.includes('.')) {
                                     rightInputName = rightInputName.split('.');
@@ -2313,7 +2476,7 @@ class duneHDAccessory {
                                 }
 
                             }
-                            //this.platform.log('Playback extra: ' + rawData.playback_extra_caption);
+                            // this.platform.log('Playback extra: ' + rawData.playback_extra_caption);
                             if (typeof rawData.playback_extra_caption !== 'undefined') {
                                 if (rawData.playback_extra_caption.includes('.') || rawData.playback_extra_caption.includes('-')) {
                                     if (rawData.playback_extra_caption.includes('.')) {
@@ -2339,7 +2502,7 @@ class duneHDAccessory {
                                     currentChap = currentChap.split('(');
                                     currentChap = Object.values(currentChap)[Object.keys(currentChap).length - 1];
                                     currentChap = currentChap.replace(/[^0-9]/g, '');
-                                    this.newCurrentChapter('Chapter ' + currentChap + '/' + numberOfChapters + ' ' + this.chapterTime);
+                                    this.newCurrentChapter('Chapter ' + currentChap + '/' + numberOfChapters + ', Start Time: ' + this.chapterTime);
                                 }
                                 else {
                                     let newChapter = rawData.playback_extra_caption.split(' ');
@@ -2415,31 +2578,62 @@ class duneHDAccessory {
                         runtimeNumber = runtimeNumber.substring(1);
                     }
                     this.newInputDuration(runtimeNumber);
-                    //////////////////Media Current position
-                    //this.platform.log('Playback position: ' + rawData.playback_position);
-                    this.newMovieTime(parseInt(rawData.playback_position));
-                    ////////////////////Media elapsed time////////////////////////////
-                    /*
-                    let elapsedRuntimeNumber = this.secondsToTime(parseInt(rawData.playback_position));
-                    if (elapsedRuntimeNumber.startsWith('0')) {
-                        elapsedRuntimeNumber = elapsedRuntimeNumber.substring(1);
-                        this.newElapsedTime(elapsedRuntimeNumber);
+                    if (typeof rawData.playback_duration != 'undefined' && typeof rawData.playback_position != 'undefined') {
+                        this.currentMoviePosition = parseInt(rawData.playback_position);
+                        let movieElapsed1 = this.movieRemaining - this.currentMoviePosition
+                        if (movieElapsed1 < 0) {
+                            this.movieElapsed = 0;
+                        }
+                        else {
+                            this.movieElapsed = movieElapsed1
+                        }
+                        //////////////////Media Current position
+                        //this.platform.log('Playback position: ' + rawData.playback_position);
+                        this.newMovieTime(parseInt(rawData.playback_position));
+                    }
+                    ////////////////////Media Information////////////////////////////
+
+                    let videoWitdth = parseInt(rawData.playback_video_width);
+                    let videoHeight = parseInt(rawData.playback_video_height);
+                    let currentBitrate = Math.round(parseInt(rawData.playback_current_bitrate) / 10000) / 100;
+                    if (parseInt(rawData.playback_video_height) >= 2160) {
+                        this.newVideoInformation('4K Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    }
+                    else if (parseInt(rawData.playback_video_height) > 1080) {
+                        this.newVideoInformation('UHD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    }
+                    else if (parseInt(rawData.playback_video_height) == 1080) {
+                        this.newVideoInformation('Full HD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    }
+                    else if (parseInt(rawData.playback_video_height) == 720) {
+                        this.newVideoInformation('HD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
                     }
                     else {
-                        this.newElapsedTime(elapsedRuntimeNumber);
-                    }*/
+                        this.newVideoInformation('SD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    }
                     ///////////////Audio format
                     //this.platform.log('Playback audio track: ' + rawData.audio_track);
-                    this.newAudioStatus(rawData['audio_track.' + rawData.audio_track + '.codec']);
+                    if (typeof rawData['audio_track.' + rawData.audio_track + '.codec'] !== 'undefined') {
+                        this.newAudioStatus(rawData['audio_track.' + rawData.audio_track + '.codec']);
+                    }
                     //////////Audio Lnaguage
-                    this.newLanguageSelector(rawData['audio_track.' + rawData.audio_track + '.lang']);
+
+                    if (rawData.subtitles_track != "-1" || typeof rawData['subtitles_track.' + rawData.subtitles_track + '.lang'] !== 'undefined') {
+                        this.subtitleLanguage = this.newLanguageSelector(rawData['subtitles_track.' + rawData.subtitles_track + '.lang']);
+                    }
+                    if (typeof rawData['audio_track.' + rawData.audio_track + '.lang'] !== 'undefined') {
+                        if (this.subtitleLanguage != '') {
+                            this.newLanguage('Audio: ' + this.newLanguageSelector(rawData['audio_track.' + rawData.audio_track + '.lang']) + ' (Subtitles in ' + this.subtitleLanguage + ')');
+                        }
+                        else {
+                            this.newLanguage('Audio: ' + this.newLanguageSelector(rawData['audio_track.' + rawData.audio_track + '.lang']));
+                        }
+                    }
                 }
                 else {
-
                 }
             }
-
-            if (this.newPlayBackState === [false, false, false]) {
+            if (this.newPlayBackState == [false, false, false]) {
                 if (this.counter > 2) {
                     this.mediaDetailsReset();
                     this.counter = 0;
@@ -2450,8 +2644,6 @@ class duneHDAccessory {
 
             }
         }
-
-
     }
     ///Query////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2794,26 +2986,28 @@ class duneHDAccessory {
     turnOffAll() {
         this.newPowerState(false);
         this.newPlayBackState([false, false, false]);
-        this.newInputState([false, false, false, false, false, false]);
         this.newVolumeStatus(0);
         this.mediaDetailsReset();
+        //this.platform.log(this.accessory.services)
     }
     mediaDetailsReset() {
         // this.platform.log("Reset details");
+        this.newInputState(1);
         this.showState = false;
         this.movieRemaining = 0;
+        this.movieElapsed = 0;
+        this.currentMoviePosition = 0;
         this.bluryaDVD = false;
+        this.subtitleLanguage = '';
         this.newMovieTime(0);
         this.newAudioFormat('Audio Format');
         this.newInputName('Media Title');
         this.newInputDuration('Runtime');
-        this.newElapsedTime('Elapsed Time');
+        this.newVideoInformation('Video Information');
         this.newCurrentChapter('Current Chapter');
         this.newLanguage('Audio Language');
-
     }
     udpServer() {
-
         this.server = udp.createSocket('udp4');
         this.server.on('error', (error) => {
             this.platform.log(error);
@@ -2823,7 +3017,6 @@ class duneHDAccessory {
         this.server.on('message', (msg, info) => {
             this.platform.log('Data received from client : ' + msg.toString());
             this.platform.log('Received %d bytes from %s:%d', msg.length, info.address, info.port);
-
         });
         //emits when socket is ready and listening for datagram msgs
         this.server.on('listening', () => {
