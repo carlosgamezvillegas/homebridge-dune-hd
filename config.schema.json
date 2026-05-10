@@ -18,6 +18,13 @@
         "placeholders": "192.168.1.1",
         "required": true
       },
+      "port": {
+        "title": "Port Number",
+        "type": "string",
+        "placeholders": "80",
+        "default": 80,
+        "required": false
+      },
       "pollingInterval": {
         "title": "Polling Interval (milliseconds)",
         "type": "integer",
@@ -25,6 +32,7 @@
         "default": 4000,
         "minimum": 2000,
         "maximum": 60000,
+        "multipleOf": 500,
         "required": false
       },
       "modelName": {
@@ -281,6 +289,13 @@
           "flex-flow": "column",
           "items": [
             "ip"
+          ]
+        },
+        {
+          "type": "flex",
+          "flex-flow": "column",
+          "items": [
+            "port"
           ]
         },
         {

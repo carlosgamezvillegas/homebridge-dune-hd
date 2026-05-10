@@ -8,8 +8,6 @@
 [![mit-license](https://badgen.net/npm/license/lodash)](https://github.com/merdok/homebridge-dune-hd/blob/master/LICENSE)
 </span>
 
-</span>
-
 # What is this?
 
 `homebrige-dune-hd` is a plugin for Homebridge to Control your Dune HD from your Home app. It should work with most of Dune HD boxes.

@@ -4,6 +4,112 @@ const PLUGIN_NAME = 'homebridge-dune-hd';
 const request = require('http');
 const udp = require('dgram');
 
+// Declarative list of optional stateless switches used to build/remove services consistently.
+const STATELESS_SWITCH_CONFIGS = [
+    { propertyName: 'cursorUp', serviceName: 'Cursor Up', uniqueId: 'CataNicoGaTa-31', configKey: 'cursorUpB', commandName: 'CURSOR UP' },
+    { propertyName: 'cursorDown', serviceName: 'Cursor Down', uniqueId: 'CataNicoGaTa-32', configKey: 'cursorDownB', commandName: 'CURSOR DOWN' },
+    { propertyName: 'cursorLeft', serviceName: 'Cursor Left', uniqueId: 'CataNicoGaTa-33', configKey: 'cursorLeftB', commandName: 'CURSOR LEFT' },
+    { propertyName: 'cursorRight', serviceName: 'Cursor Right', uniqueId: 'CataNicoGaTa-34', configKey: 'cursorRightB', commandName: 'CURSOR RIGHT' },
+    { propertyName: 'cursorEnter', serviceName: 'Cursor Enter', uniqueId: 'CataNicoGaTa-35', configKey: 'cursorEnterB', commandName: 'CURSOR ENTER' },
+    { propertyName: 'searchB', serviceName: 'Search', uniqueId: 'CataNicoGaTa-36', configKey: 'searchB', commandName: 'SEARCH' },
+    { propertyName: 'backButton', serviceName: 'Back', uniqueId: 'CataNicoGaTa-37', configKey: 'backButtonB', commandName: 'BACK' },
+    { propertyName: 'infoButton', serviceName: 'Info', uniqueId: 'CataNicoGaTa-44', configKey: 'infoB', commandName: 'INFO' },
+    { propertyName: 'pageUp', serviceName: 'Page Up', uniqueId: 'CataNicoGaTa-50', configKey: 'pageUpB', commandName: 'PAGE UP' },
+    { propertyName: 'pageDown', serviceName: 'Page Down', uniqueId: 'CataNicoGaTa-51', configKey: 'pageDownB', commandName: 'PAGE DOWN' },
+    { propertyName: 'popUpMenu', serviceName: 'Pop-Up Menu', uniqueId: 'CataNicoGaTa-52', configKey: 'popUpMenuB', commandName: 'POP-UP MENU' },
+    { propertyName: 'previous', serviceName: 'Previous', uniqueId: 'CataNicoGaTa-38', configKey: 'mediaButtons', commandName: 'PREVIOUS' },
+    { propertyName: 'next', serviceName: 'Next', uniqueId: 'CataNicoGaTa-39', configKey: 'mediaButtons', commandName: 'NEXT' },
+    { propertyName: 'rewindButton', serviceName: 'Rewind', uniqueId: 'CataNicoGaTa-46', configKey: 'mediaButtons', commandName: 'REWIND' },
+    { propertyName: 'forwardButton', serviceName: 'Forward', uniqueId: 'CataNicoGaTa-80', configKey: 'mediaButtons', commandName: 'FORWARD' },
+    { propertyName: 'red', serviceName: 'Red', uniqueId: 'CataNicoGaTa-53', configKey: 'redB', commandName: 'RED' },
+    { propertyName: 'green', serviceName: 'Green', uniqueId: 'CataNicoGaTa-54', configKey: 'greenB', commandName: 'GREEN' },
+    { propertyName: 'blue', serviceName: 'Blue', uniqueId: 'CataNicoGaTa-55', configKey: 'blueB', commandName: 'BLUE' },
+    { propertyName: 'yellow', serviceName: 'Yellow', uniqueId: 'CataNicoGaTa-56', configKey: 'yellowB', commandName: 'YELLOW' },
+    { propertyName: 'audio', serviceName: 'Audio', uniqueId: 'CataNicoGaTa-57', configKey: 'audioB', commandName: 'AUDIO' },
+    { propertyName: 'subtitle', serviceName: 'Subtitle', uniqueId: 'CataNicoGaTa-58', configKey: 'subtitleB', commandName: 'SUBTITLE' },
+    { propertyName: 'repeat', serviceName: 'Repeat', uniqueId: 'CataNicoGaTa-63', configKey: 'repeatB', commandName: 'REPEAT' },
+    { propertyName: 'pip', serviceName: 'Shuffle-PIP', uniqueId: 'CataNicoGaTa-64', configKey: 'pipB', commandName: 'PIP' },
+    { propertyName: 'selectB', serviceName: 'Select', uniqueId: 'CataNicoGaTa-65', configKey: 'selectB', commandName: 'SELECT' },
+    { propertyName: 'mute', serviceName: 'Mute', uniqueId: 'CataNicoGaTa-9001', configKey: 'muteB', commandName: 'MUTE' },
+    { propertyName: 'record', serviceName: 'Record', uniqueId: 'CataNicoGaTa-9002', configKey: 'recordB', commandName: 'RECORD' },
+    { propertyName: 'movie', serviceName: 'Movie', uniqueId: 'CataNicoGaTa-9003', configKey: 'movieB', commandName: 'MOVIE' },
+    { propertyName: 'music', serviceName: 'Music', uniqueId: 'CataNicoGaTa-9004', configKey: 'musicB', commandName: 'MUSIC' },
+    { propertyName: 'tvB', serviceName: 'TV', uniqueId: 'CataNicoGaTa-9005', configKey: 'tvB', commandName: 'TV' },
+    { propertyName: 'ejectB', serviceName: 'Eject', uniqueId: 'CataNicoGaTa-9006', configKey: 'ejectB', commandName: 'EJECT' },
+    { propertyName: 'modeB', serviceName: 'Mode', uniqueId: 'CataNicoGaTa-9007', configKey: 'modeB', commandName: 'LIGHT' },
+    { propertyName: 'slowB', serviceName: 'Slow', uniqueId: 'CataNicoGaTa-9008', configKey: 'slowB', commandName: 'SLOW' },
+    { propertyName: 'mouseB', serviceName: 'Mouse', uniqueId: 'CataNicoGaTa-9009', configKey: 'mouseB', commandName: 'MOUSE' },
+    { propertyName: 'clear', serviceName: 'Clear', uniqueId: 'CataNicoGaTa-40', configKey: 'clearB', commandName: 'CLEAR' },
+    { propertyName: 'zoom', serviceName: 'Zoom', uniqueId: 'CataNicoGaTa-60', configKey: 'zoomB', commandName: 'ZOOM' },
+    { propertyName: 'setup', serviceName: 'Setup', uniqueId: 'CataNicoGaTa-45', configKey: 'setupB', commandName: 'SETUP' },
+    { propertyName: 'topMenu', serviceName: 'Top Menu', uniqueId: 'CataNicoGaTa-41', configKey: 'topMenuB', commandName: 'TOP MENU' },
+    { propertyName: 'angle', serviceName: 'Angle', uniqueId: 'CataNicoGaTa-59', configKey: 'angleB', commandName: 'ANGLE' },
+    { propertyName: 'recentB', serviceName: 'Recent', uniqueId: 'CataNicoGaTa-X09', configKey: 'recentB', commandName: 'RECENT' },
+];
+
+// Shared Dune remote command definitions used for both command logging and IR URL generation.
+const REMOTE_COMMAND_DEFINITIONS = [
+    { code: 'A05F', label: 'Power On', buttons: ['POWER ON'] },
+    { code: 'A15E', label: 'Power Off', buttons: ['POWER OFF'] },
+    { code: '9E61', label: 'Recent', buttons: ['RECENT'] },
+    { code: 'EA15', label: 'Cursor Up', buttons: ['CURSOR UP'] },
+    { code: 'E916', label: 'Cursor Down', buttons: ['CURSOR DOWN'] },
+    { code: 'E817', label: 'Cursor Left', buttons: ['CURSOR LEFT'] },
+    { code: 'E718', label: 'Cursor Right', buttons: ['CURSOR RIGHT'] },
+    { code: 'EB14', label: 'Enter', buttons: ['CURSOR ENTER'] },
+    { code: 'F906', label: 'Search', buttons: ['SEARCH'] },
+    { code: 'FB04', label: 'Back', buttons: ['BACK'] },
+    { code: 'B748', label: 'Play/Play-Pause', buttons: ['PLAY', 'PLAY/PAUSE'] },
+    { code: 'E11E', label: 'Pause', buttons: ['PAUSE'] },
+    { code: 'E619', label: 'Stop', buttons: ['STOP'] },
+    { code: 'B649', label: 'Previous Chapter', buttons: ['PREVIOUS'] },
+    { code: 'E21D', label: 'Next Chapter', buttons: ['NEXT'] },
+    { code: 'AF50', label: 'Information', buttons: ['INFO'] },
+    { code: 'E31C', label: 'Rewind', buttons: ['REWIND'] },
+    { code: 'E41B', label: 'Forward', buttons: ['FORWARD'] },
+    { code: 'B44B', label: 'Page Up', buttons: ['PAGE UP'] },
+    { code: 'B34C', label: 'Page Down', buttons: ['PAGE DOWN'] },
+    { code: 'F807', label: 'Pop-Up Menu', buttons: ['POP-UP MENU'] },
+    { code: 'BF40', label: 'Red', buttons: ['RED'] },
+    { code: 'E01F', label: 'Green', buttons: ['GREEN'] },
+    { code: 'FF00', label: 'Yellow', buttons: ['YELLOW'] },
+    { code: 'BE41', label: 'Blue', buttons: ['BLUE'] },
+    { code: 'BB44', label: 'Audio', buttons: ['AUDIO'] },
+    { code: 'AB54', label: 'Subtitle', buttons: ['SUBTITLE'] },
+    { code: 'B04F', label: 'Repeat/Mouse', buttons: ['REPEAT', 'MOUSE'] },
+    { code: 'B847', label: 'PIP/Movie', buttons: ['PIP', 'MOVIE'] },
+    { code: 'BD42', label: 'Select', buttons: ['SELECT'] },
+    { code: 'AD52', label: 'Volume Up', buttons: ['VOLUME UP'] },
+    { code: 'AC53', label: 'Volume Down', buttons: ['VOLUME DOWN'] },
+    { code: 'B946', label: 'Mute', buttons: ['MUTE'] },
+    { code: '9F60', label: 'Record', buttons: ['RECORD'] },
+    { code: 'A758', label: 'Music', buttons: ['MUSIC'] },
+    { code: '9C63', label: 'TV', buttons: ['TV'] },
+    { code: 'EF10', label: 'Eject', buttons: ['EJECT'] },
+    { code: 'light', label: 'Light', buttons: ['LIGHT'] },
+    { code: 'E51A', label: 'Slow', buttons: ['SLOW'] },
+    { code: 'FA05', label: 'Clear', buttons: ['CLEAR'] },
+    { code: 'FD02', label: 'Zoom', buttons: ['ZOOM'] },
+    { code: 'B14E', label: 'Setup', buttons: ['SETUP'] },
+    { code: 'AE51', label: 'Top Menu', buttons: ['TOP MENU'] },
+    { code: 'B24D', label: 'Angle', buttons: ['ANGLE'] },
+];
+
+const BUTTON_IR_CODE_MAP = REMOTE_COMMAND_DEFINITIONS.reduce((map, definition) => {
+    for (const buttonName of definition.buttons) {
+        map[buttonName] = definition.code;
+    }
+    return map;
+}, {});
+
+const COMMAND_NAME_MATCHES = [
+    { token: 'standby', label: 'Standby' },
+    { token: 'position', label: 'New Position' },
+    ...REMOTE_COMMAND_DEFINITIONS.map((definition) => ({ token: definition.code, label: definition.label })),
+    { token: 'getDeviceInfo', label: 'Get Device Information' },
+    { token: 'seek', label: 'Searching' },
+];
+
 module.exports = (api) => {
     api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, duneHDPlatform, true);
 };
@@ -25,13 +131,13 @@ class duneHDPlatform {
             this.iniDevice();
         });
     }
+
+
     configureAccessory(accessory) {
         this.log.info('Loading accessory from cache:', accessory.displayName);
         this.accessories.push(accessory);
     }
-    removeAccessory(accessory) {
-        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-    }
+
     iniDevice() {
         if (this.config.newPlatformUUID === false) {
             this.duneHDDevice =
@@ -51,10 +157,14 @@ class duneHDPlatform {
         const uuid = this.api.hap.uuid.generate(this.duneHDDevice.duneHDUniqueId);
         this.log.debug('Adding new accessory:', this.duneHDDevice.duneHDDisplayName);
         const accessory = new this.api.platformAccessory(this.duneHDDevice.duneHDDisplayName, uuid);
-        accessory.category = this.api.hap.Accessory.Categories.TV_SET_TOP_BOX;
+        accessory.category = 35;
         accessory.context.device = this.duneHDDevice;
         new duneHDAccessory(this, accessory);
         this.api.publishExternalAccessories(PLUGIN_NAME, [accessory]);
+    }
+
+    removeAccessory(accessory) {
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
     }
 }
 class duneHDAccessory {
@@ -80,7 +190,7 @@ class duneHDAccessory {
         this.videoState = false;
         this.audioState = false;
         this.chapterTime = '';
-        this.inputName = 'Media Name';
+        this.inputName = 'Media Title';
         this.mediaDuration = 'Runtime';
         this.mediaInformation = 'Video Information';
         this.mediaChapter = 'Current Chapter';
@@ -89,6 +199,7 @@ class duneHDAccessory {
         this.subtitleLanguage = '';
         this.showState = false;
         this.httpNotResponding = 0;
+        this.pollInFlight = false;
         this.turnOffAllUsed = false;
         this.counter = 0;
         /////MovieConstants
@@ -166,7 +277,9 @@ class duneHDAccessory {
         this.accessory.getService(this.platform.Service.AccessoryInformation)
             .setCharacteristic(this.platform.Characteristic.Manufacturer, this.config.manufacturer)
             .setCharacteristic(this.platform.Characteristic.Model, this.config.modelName)
-            .setCharacteristic(this.platform.Characteristic.SerialNumber, this.config.serialN);
+            .setCharacteristic(this.platform.Characteristic.SerialNumber, this.config.serialN)
+            .setCharacteristic(this.platform.Characteristic.FirmwareRevision, '1.3.1');
+
         // set accessory information//////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -275,7 +388,8 @@ class duneHDAccessory {
                     }
                     case this.platform.Characteristic.RemoteKey.EXIT: {
                         this.platform.log.debug('set Remote Key Pressed: EXIT');
-                        this.sending([this.pressedButton('HOME MENU')]);
+                        // Dune maps this action to Top Menu (Home Menu is not a valid key in pressedButton()).
+                        this.sending([this.pressedButton('TOP MENU')]);
                         break;
                     }
                     case this.platform.Characteristic.RemoteKey.PLAY_PAUSE: {
@@ -332,95 +446,8 @@ class duneHDAccessory {
                 }
                 callback();
             });
-        // Input Sources///////////////////////////////////////////////////////////////////////////////////////////////////////////
-        this.videoAudioTitle = this.accessory.getService('Media Title') ||
-            this.accessory.addService(this.platform.Service.InputSource, 'Media Title', 'CataNicoGaTa-1003')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 1)
-                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName)
-                .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
-                .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.APPLICATION)
-                .setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.platform.Characteristic.CurrentVisibilityState.SHOWN);
-        this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName)
-            .on('get', (callback) => {
-                let currentValue = this.inputName;
-                this.platform.log.debug('Getting' + currentValue);
-                callback(null, currentValue);
-            });
-        this.tvService.addLinkedService(this.videoAudioTitle);
-        this.runtime = this.accessory.getService('Runtime') ||
-            this.accessory.addService(this.platform.Service.InputSource, 'Runtime', 'CataNicoGaTa-1004')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 2)
-                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration)
-                .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
-                .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.HDMI)
-                .setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.platform.Characteristic.CurrentVisibilityState.SHOWN);
-        this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName)
-            .on('get', (callback) => {
-                let currentValue = this.mediaDuration;
-                this.platform.log.debug('Getting' + currentValue);
-                callback(null, currentValue);
-            });
-        this.tvService.addLinkedService(this.runtime);
-        this.videoAudioElapseTime = this.accessory.getService('Video Information') ||
-            this.accessory.addService(this.platform.Service.InputSource, 'Video Information', 'CataNicoGaTa-1005')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 4)
-                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaInformation)
-                .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
-                .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.HDMI)
-                .setCharacteristic(this.platform.Characteristic.TargetVisibilityState, false ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
-                .setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, false ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-        this.videoAudioElapseTime.getCharacteristic(this.platform.Characteristic.ConfiguredName)
-            .on('get', (callback) => {
-                let currentValue = this.mediaInformation;
-                this.platform.log.debug('Getting' + currentValue);
-                callback(null, currentValue);
-            });
-        this.tvService.addLinkedService(this.videoAudioElapseTime);
-        this.currentChaper = this.accessory.getService('Current Chapter') ||
-            this.accessory.addService(this.platform.Service.InputSource, 'Current Chapter', 'CataNicoGaTa-4005')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 3)
-                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter)
-                .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
-                .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.HDMI)
-                .setCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
-                .setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-        this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName)
-            .on('get', (callback) => {
-                let currentValue = this.mediaChapter;
-                this.platform.log.debug('Getting' + currentValue);
-                callback(null, currentValue);
-            });
-        this.tvService.addLinkedService(this.currentChaper);
-        this.audioFormat = this.accessory.getService('Audio Format') ||
-            this.accessory.addService(this.platform.Service.InputSource, 'Audio Format', 'CataNicoGaTa-4006')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 5)
-                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat)
-                .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
-                .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.HDMI)
-                .setCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
-                .setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-        this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName)
-            .on('get', (callback) => {
-                let currentValue = this.mediaAudioFormat;
-                this.platform.log.debug('Getting' + currentValue);
-                callback(null, currentValue);
-            });
-        this.tvService.addLinkedService(this.audioFormat);
-        this.audioLanguage = this.accessory.getService('Audio Language') ||
-            this.accessory.addService(this.platform.Service.InputSource, 'Audio Language', 'CataNicoGaTa-4007')
-                .setCharacteristic(this.platform.Characteristic.Identifier, 6)
-                .setCharacteristic(this.platform.Characteristic.ConfiguredName, this.language)
-                .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
-                .setCharacteristic(this.platform.Characteristic.InputSourceType, this.platform.Characteristic.InputSourceType.HDMI)
-                .setCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
-                .setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-        this.audioLanguage.getCharacteristic(this.platform.Characteristic.ConfiguredName)
-            .on('get', (callback) => {
-                let currentValue = this.language;
-                this.platform.log.debug('Getting' + currentValue);
-                callback(null, currentValue);
-            });
-        this.tvService.addLinkedService(this.audioLanguage);
+        // Build all TV input source services from a declarative definition table.
+        this.buildInputSources();
         /////Media State/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState)
             .on('get', (callback) => {
@@ -519,1038 +546,47 @@ class duneHDAccessory {
         this.tvService.addLinkedService(this.speakerService);
         /////Volume and Video/Movie Controls/////////////////////////////////////////////////////////////////////
         if (this.config.volume === true) {
-            if (this.config.changeDimmersToFan === false) {
-                this.volumeDimmer = this.accessory.getService('Dune HD Volume') ||
-                    this.accessory.addService(this.platform.Service.Lightbulb, 'Dune HD Volume', 'CataNicoGaT-98');
-                this.volumeDimmer.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-                this.volumeDimmer.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Dune HD Volume');
-                this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On)
-                    .on('get', (callback) => {
-                        let currentValue = this.currentVolumeSwitch;
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        if (newValue === true) {
-                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state_&mute=0&result_syntax=json"]);
-                            this.platform.log('Volume Value set to: Unmute');
-                        }
-                        if (newValue === false) {
-                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=1&result_syntax=json"]);
-                            this.platform.log('Volume Value set to: Mute');
-                        }
-
-                        callback(null);
-                    });
-
-                this.volumeDimmer.addCharacteristic(new this.platform.Characteristic.Brightness())
-                    .on('get', (callback) => {
-                        let currentValue = this.currentVolume;
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
-                        this.platform.log('Volume Value set to: ' + newValue);
-
-                        callback(null);
-                    });
-            }
-            else {
-                this.volumeFan = this.accessory.getService('Dune HD Volume') ||
-                    this.accessory.addService(this.platform.Service.Fanv2, 'Dune HD Volume', 'CataNicoGaT-98F');
-                this.volumeFan.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-                this.volumeFan.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Dune HD Volume');
-                this.volumeFan.getCharacteristic(this.platform.Characteristic.Active)
-                    .on('get', (callback) => {
-                        let currentValue = 0;
-                        if (this.currentVolumeSwitch === true) {
-                            currentValue = 1;
-                        }
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        if (newValue === 1) {
-                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state_&mute=0&result_syntax=json"]);
-                            this.platform.log('Volume Value set to: Unmute');
-                        }
-                        if (newValue === 0) {
-                            this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=1&result_syntax=json"]);
-                            this.platform.log('Volume Value set to: Mute');
-                        }
-
-                        callback(null);
-                    });
-
-                this.volumeFan.addCharacteristic(new this.platform.Characteristic.RotationSpeed)
-                    .on('get', (callback) => {
-                        let currentValue = this.currentVolume;
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
-                        this.platform.log('Volume Value set to: ' + newValue);
-
-                        callback(null);
-                    });
-            }
+            this.buildVolumeControlService();
         }
         if (this.config.movieControl === true) {
-            if (this.config.changeDimmersToFan === false) {
-                this.movieControlL = this.accessory.getService('Media Progress') ||
-                    this.accessory.addService(this.platform.Service.Lightbulb, 'Media Progress', 'CataNicoGaTa-301');
-                this.movieControlL.setCharacteristic(this.platform.Characteristic.Name, 'Media Progress');
-                this.movieControlL.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-                this.movieControlL.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Media Progress');
-                this.movieControlL.getCharacteristic(this.platform.Characteristic.On)
-                    .on('get', (callback) => {
-                        let currentValue = this.currentMovieProgressState;
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        this.platform.log('Movie progress state set to: ' + newValue);
-                        callback(null);
-                    });
-                this.movieControlL.addCharacteristic(new this.platform.Characteristic.Brightness())
-                    .on('get', (callback) => {
-                        let currentValue = this.currentMovieProgress;
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        let newSendValue = Math.round(newValue * (this.movieRemaining) / 100);
-                        if (newSendValue > this.movieRemaining) {
-                            newSendValue = this.movieRemaining;
-                        }
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&position=" + newSendValue + "&result_syntax=json"]);
-                        this.newMovieTime(newSendValue);
-                        this.platform.log('Movie progress set to: ' + newValue + '%');
-                        callback(null);
-                    });
-            }
-            else {
-                this.movieControlF = this.accessory.getService('Media Progress') ||
-                    this.accessory.addService(this.platform.Service.Fanv2, 'Media Progress', 'CataNicoGaTa-301F');
-                this.movieControlF.setCharacteristic(this.platform.Characteristic.Name, 'Media Progress');
-                this.movieControlF.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-                this.movieControlF.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Media Progress');
-                this.movieControlF.getCharacteristic(this.platform.Characteristic.Active)
-                    .on('get', (callback) => {
-                        let currentValue = 0;
-                        if (this.currentMovieProgressState === true) {
-                            currentValue = 1;
-                        }
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        this.platform.log('Movie progress state set to: ' + newValue);
-                        callback(null);
-                    });
-                this.movieControlF.addCharacteristic(new this.platform.Characteristic.RotationSpeed)
-                    .on('get', (callback) => {
-                        let currentValue = this.currentMovieProgress;
-                        callback(null, currentValue);
-                    })
-                    .on('set', (newValue, callback) => {
-                        let newSendValue = Math.round(newValue * (this.movieRemaining) / 100);
-                        if (newSendValue > this.movieRemaining) {
-                            newSendValue = this.movieRemaining;
-                        }
-                        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&position=" + newSendValue + "&result_syntax=json"]);
-                        this.newMovieTime(newSendValue);
-                        this.platform.log('Movie progress set to: ' + newValue + '%');
-                        callback(null);
-                    });
-            }
+            this.buildMovieProgressService();
         }
         /////////////Addtional Services////////////////////////////////////////////////////////////////////////////////////
         if (this.config.powerB === true) {
-            this.service = this.accessory.getService(this.platform.Service.Switch) || this.accessory.addService(this.platform.Service.Switch);
-            this.service.setCharacteristic(this.platform.Characteristic.Name, `${accessory.context.device.duneHDDisplayName} Power Switch`);
-            this.service.updateCharacteristic(this.platform.Characteristic.Name, `${accessory.context.device.duneHDDisplayName} Power Switch`);
-            this.service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, `${accessory.context.device.duneHDDisplayName} Power Switch`);
-            this.service.getCharacteristic(this.platform.Characteristic.On)
-                .on('set', this.setOn.bind(this))
-                .on('get', this.getOn.bind(this));
+            const powerSwitchServiceName = `${accessory.context.device.duneHDDisplayName} Power Switch`;
+            this.createStatefulSwitch({
+                propertyName: 'service',
+                serviceName: powerSwitchServiceName,
+                uniqueId: 'CataNicoGaTa-PWR-Dune',
+                onGet: this.getOn.bind(this),
+                onSet: this.setOn.bind(this),
+                setNameCharacteristic: true,
+            });
         };
-        this.play = this.accessory.getService('Play') ||
-            this.accessory.addService(this.platform.Service.Switch, 'Play', 'CataNicoGaTa-10');
-        this.play.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-        this.play.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Play');
-        this.play.getCharacteristic(this.platform.Characteristic.On)
-            .on('get', this.playSwitchStateGet.bind(this))
-            .on('set', this.playSwitchStateSet.bind(this));
-        this.pause = this.accessory.getService('Pause') ||
-            this.accessory.addService(this.platform.Service.Switch, 'Pause', 'CataNicoGaTa-11');
-        this.pause.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-        this.pause.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Pause');
-        this.pause.getCharacteristic(this.platform.Characteristic.On)
-            .on('get', this.pauseSwitchStateGet.bind(this))
-            .on('set', this.pauseSwitchStateSet.bind(this));
-        this.stop = this.accessory.getService('Stop') ||
-            this.accessory.addService(this.platform.Service.Switch, 'Stop', 'CataNicoGaTa-12');
-        this.stop.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-        this.stop.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Stop');
-        this.stop.getCharacteristic(this.platform.Characteristic.On)
-            .on('get', this.stopSwitchStateGet.bind(this))
-            .on('set', this.stopSwitchStateSet.bind(this));
+        this.createStatefulSwitch({
+            propertyName: 'play',
+            serviceName: 'Play',
+            uniqueId: 'CataNicoGaTa-10',
+            onGet: this.playSwitchStateGet.bind(this),
+            onSet: this.playSwitchStateSet.bind(this),
+        });
+        this.createStatefulSwitch({
+            propertyName: 'pause',
+            serviceName: 'Pause',
+            uniqueId: 'CataNicoGaTa-11',
+            onGet: this.pauseSwitchStateGet.bind(this),
+            onSet: this.pauseSwitchStateSet.bind(this),
+        });
+        this.createStatefulSwitch({
+            propertyName: 'stop',
+            serviceName: 'Stop',
+            uniqueId: 'CataNicoGaTa-12',
+            onGet: this.stopSwitchStateGet.bind(this),
+            onSet: this.stopSwitchStateSet.bind(this),
+        });
         ///////////////////////////////////Input buttons//////////////////////////////////////////////////////////////////////////
 
-        ////other Controls /////////////////////////////////////////////////////////
-        if (this.config.cursorUpB === true) {
-            this.cursorUp = this.accessory.getService('Cursor Up') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Cursor Up', 'CataNicoGaTa-31');
-            this.cursorUp.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.cursorUp.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Up');
-            this.cursorUp.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Cursor Up GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Cursor Up SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('CURSOR UP')]);
-                    }
-                    setTimeout(() => {
-                        this.cursorUp.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.cursorDownB === true) {
-            this.cursorDown = this.accessory.getService('Cursor Down') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Cursor Down', 'CataNicoGaTa-32');
-            this.cursorDown.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.cursorDown.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Down');
-            this.cursorDown.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Cursor Down GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Cursor Down SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('CURSOR DOWN')]);
-                    }
-                    setTimeout(() => {
-                        this.cursorDown.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.cursorLeftB === true) {
-            this.cursorLeft = this.accessory.getService('Cursor Left') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Cursor Left', 'CataNicoGaTa-33');
-            this.cursorLeft.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.cursorLeft.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Left');
-            this.cursorLeft.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Cursor Left GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Cursor Left SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('CURSOR LEFT')]);
-                    }
-                    setTimeout(() => {
-                        this.cursorLeft.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.cursorRightB === true) {
-            this.cursorRight = this.accessory.getService('Cursor Right') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Cursor Right', 'CataNicoGaTa-34');
-            this.cursorRight.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.cursorRight.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Right');
-            this.cursorRight.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Cursor Right GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Cursor Right SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('CURSOR RIGHT')]);
-                    }
-                    setTimeout(() => {
-                        this.cursorRight.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.cursorEnterB === true) {
-            this.cursorEnter = this.accessory.getService('Cursor Enter') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Cursor Enter', 'CataNicoGaTa-35');
-            this.cursorEnter.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.cursorEnter.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Cursor Enter');
-            this.cursorEnter.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Cursor Enter GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Cursor Enter SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('CURSOR ENTER')]);
-                    }
-                    setTimeout(() => {
-                        this.cursorEnter.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.searchB === true) {
-            this.searchB = this.accessory.getService('Search') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Search', 'CataNicoGaTa-36');
-            this.searchB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.searchB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Search');
-            this.searchB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Search GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Search SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('SEARCH')]);
-                    }
-                    setTimeout(() => {
-                        this.searchB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.backButtonB === true) {
-            this.backButton = this.accessory.getService('Back') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Back', 'CataNicoGaTa-37');
-            this.backButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.backButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Back');
-            this.backButton.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Back GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Back SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('BACK')]);
-                    }
-                    setTimeout(() => {
-                        this.backButton.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.infoB === true) {
-            this.infoButton = this.accessory.getService('Info') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Info', 'CataNicoGaTa-44');
-            this.infoButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.infoButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Info');
-            this.infoButton.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Info GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Info SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('INFO')]);
-                    }
-                    setTimeout(() => {
-                        this.infoButton.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.pageUpB === true) {
-            this.pageUp = this.accessory.getService('Page Up') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Page Up', 'CataNicoGaTa-50');
-            this.pageUp.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.pageUp.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Page Up');
-            this.pageUp.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Page Up GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Page Up SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('PAGE UP')]);
-                    }
-                    setTimeout(() => {
-                        this.pageUp.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.pageDownB === true) {
-            this.pageDown = this.accessory.getService('Page Down') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Page Down', 'CataNicoGaTa-51');
-            this.pageDown.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.pageDown.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Page Down');
-            this.pageDown.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Page Down GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Page Down SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('PAGE DOWN')]);
-                    }
-                    setTimeout(() => {
-                        this.pageDown.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.popUpMenuB === true) {
-            this.popUpMenu = this.accessory.getService('Pop-Up Menu') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Pop-Up Menu', 'CataNicoGaTa-52');
-            this.popUpMenu.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.popUpMenu.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Pop-Up Menu');
-            this.popUpMenu.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Pop-Up Menu GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Pop-Up Menu SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('POP-UP MENU')]);
-                    }
-                    setTimeout(() => {
-                        this.popUpMenu.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        //////Additional Media Buttons/////////////////////////////////////////////////
-        if (this.config.mediaButtons === true) {
-            this.previous = this.accessory.getService('Previous') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Previous', 'CataNicoGaTa-38');
-            this.previous.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.previous.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Previous');
-            this.previous.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Previous GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Previous SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('PREVIOUS')]);
-                    }
-                    setTimeout(() => {
-                        this.previous.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-            this.next = this.accessory.getService('Next') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Next', 'CataNicoGaTa-39');
-            this.next.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.next.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Next');
-            this.next.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Next GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Next SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('NEXT')]);
-                    }
-                    setTimeout(() => {
-                        this.next.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-            this.rewindButton = this.accessory.getService('Rewind') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Rewind', 'CataNicoGaTa-46');
-            this.rewindButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.rewindButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Rewind');
-            this.rewindButton.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Rewind GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Rewind SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('REWIND')]);
-                    }
-                    setTimeout(() => {
-                        this.rewindButton.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-            this.forwardButton = this.accessory.getService('Forward') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Forward', 'CataNicoGaTa-80');
-            this.forwardButton.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.forwardButton.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Forward');
-            this.forwardButton.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Forward GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Forward SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('FORWARD')]);
-                    }
-                    setTimeout(() => {
-                        this.forwardButton.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        /////The rest of the buttons///////////////////////////////////////////////////////////////////
-        if (this.config.redB === true) {
-            this.red = this.accessory.getService('Red') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Red', 'CataNicoGaTa-53');
-            this.red.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.red.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Red');
-            this.red.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Red GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Red SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('RED')]);
-                    }
-                    setTimeout(() => {
-                        this.red.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.greenB === true) {
-            this.green = this.accessory.getService('Green') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Green', 'CataNicoGaTa-54');
-            this.green.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.green.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Green');
-            this.green.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Green GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Green SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('GREEN')]);
-                    }
-                    setTimeout(() => {
-                        this.green.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.blueB === true) {
-            this.blue = this.accessory.getService('Blue') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Blue', 'CataNicoGaTa-55');
-            this.blue.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.blue.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Blue');
-            this.blue.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Blue GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Blue SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('BLUE')]);
-                    }
-                    setTimeout(() => {
-                        this.blue.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.yellowB === true) {
-            this.yellow = this.accessory.getService('Yellow') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Yellow', 'CataNicoGaTa-56');
-            this.yellow.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.yellow.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Yellow');
-            this.yellow.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Yellow GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Yellow SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('YELLOW')]);
-                    }
-                    setTimeout(() => {
-                        this.yellow.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.audioB === true) {
-            this.audio = this.accessory.getService('Audio') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Audio', 'CataNicoGaTa-57');
-            this.audio.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.audio.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Audio');
-            this.audio.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Audio GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Audio SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('AUDIO')]);
-                    }
-                    setTimeout(() => {
-                        this.audio.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.subtitleB === true) {
-            this.subtitle = this.accessory.getService('Subtitle') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Subtitle', 'CataNicoGaTa-58');
-            this.subtitle.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.subtitle.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Subtitle');
-            this.subtitle.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Subtitle GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Subtitle SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('SUBTITLE')]);
-                    }
-                    setTimeout(() => {
-                        this.subtitle.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.repeatB === true) {
-            this.repeat = this.accessory.getService('Repeat') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Repeat', 'CataNicoGaTa-63');
-            this.repeat.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.repeat.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Repeat');
-            this.repeat.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Repeat GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Repeat SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('REPEAT')]);
-                    }
-                    setTimeout(() => {
-                        this.repeat.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.pipB === true) {
-
-            this.pip = this.accessory.getService('Shuffle-PIP') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Shuffle-PIP', 'CataNicoGaTa-64');
-            this.pip.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.pip.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Shuffle-PIP');
-            this.pip.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Shuffle-PIP GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Shuffle-PIP SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('PIP')]);
-                    }
-                    setTimeout(() => {
-                        this.pip.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.selectB === true) {
-            this.selectB = this.accessory.getService('Select') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Select', 'CataNicoGaTa-65');
-            this.selectB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.selectB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Select');
-            this.selectB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Select GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Select SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('SELECT')]);
-                    }
-                    setTimeout(() => {
-                        this.selectB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-
-        if (this.config.muteB === true) {
-            this.mute = this.accessory.getService('Mute') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Mute', 'CataNicoGaTa-9001');
-            this.mute.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.mute.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Mute');
-            this.mute.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Mute GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Mute SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('MUTE')]);
-                    }
-                    setTimeout(() => {
-                        this.mute.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.recordB === true) {
-            this.record = this.accessory.getService('Record') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Record', 'CataNicoGaTa-9002');
-            this.record.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.record.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Record');
-            this.record.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Record GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Record SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('RECORD')]);
-                    }
-                    setTimeout(() => {
-                        this.record.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.movieB === true) {
-            this.movie = this.accessory.getService('Movie') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Movie', 'CataNicoGaTa-9003');
-            this.movie.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.movie.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Movie');
-            this.movie.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Movie GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Movie SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('MOVIE')]);
-                    }
-                    setTimeout(() => {
-                        this.movie.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.musicB === true) {
-            this.music = this.accessory.getService('Music') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Music', 'CataNicoGaTa-9004');
-            this.music.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.music.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Music');
-            this.music.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Music GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Music SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('MUSIC')]);
-                    }
-                    setTimeout(() => {
-                        this.music.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.tvB === true) {
-            this.tvB = this.accessory.getService('TV') ||
-                this.accessory.addService(this.platform.Service.Switch, 'TV', 'CataNicoGaTa-9005');
-            this.tvB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.tvB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'TV');
-            this.tvB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('TV GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('TV SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('TV')]);
-                    }
-                    setTimeout(() => {
-                        this.tvB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.ejectB === true) {
-            this.ejectB = this.accessory.getService('Eject') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Eject', 'CataNicoGaTa-9006');
-            this.ejectB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.ejectB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Eject');
-            this.ejectB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Eject GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Eject SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('EJECT')]);
-                    }
-                    setTimeout(() => {
-                        this.ejectB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.modeB === true) {
-            this.modeB = this.accessory.getService('Mode') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Mode', 'CataNicoGaTa-9007');
-            this.modeB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.modeB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Mode');
-            this.modeB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Mode GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Mode SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('LIGHT')]);
-                    }
-                    setTimeout(() => {
-                        this.modeB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.slowB === true) {
-            this.slowB = this.accessory.getService('Slow') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Slow', 'CataNicoGaTa-9008');
-            this.slowB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.slowB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Slow');
-            this.slowB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Slow GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Slow SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('SLOW')]);
-                    }
-                    setTimeout(() => {
-                        this.slowB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.mouseB === true) {
-            this.mouseB = this.accessory.getService('Mouse') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Mouse', 'CataNicoGaTa-9009');
-            this.mouseB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.mouseB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Mouse');
-            this.mouseB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Mouse GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Mouse SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('MOUSE')]);
-                    }
-                    setTimeout(() => {
-                        this.mouseB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.clearB === true) {
-            this.clear = this.accessory.getService('Clear') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Clear', 'CataNicoGaTa-40');
-            this.clear.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.clear.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Clear');
-            this.clear.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Clear GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Clear SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('CLEAR')]);
-                    }
-                    setTimeout(() => {
-                        this.clear.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.zoomB === true) {
-            this.zoom = this.accessory.getService('Zoom') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Zoom', 'CataNicoGaTa-60');
-            this.zoom.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.zoom.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Zoom');
-            this.zoom.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Zoom GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Zoom SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('ZOOM')]);
-                    }
-                    setTimeout(() => {
-                        this.zoom.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.setupB === true) {
-            this.setup = this.accessory.getService('Setup') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Setup', 'CataNicoGaTa-45');
-            this.setup.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.setup.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Setup');
-            this.setup.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Setup GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Setup SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('SETUP')]);
-                    }
-                    setTimeout(() => {
-                        this.setup.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.topMenuB === true) {
-            this.topMenu = this.accessory.getService('Top Menu') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Top Menu', 'CataNicoGaTa-41');
-            this.topMenu.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.topMenu.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Top Menu');
-            this.topMenu.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Top Menu GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Top Menu SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('TOP MENU')]);
-                    }
-                    setTimeout(() => {
-                        this.topMenu.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.angleB === true) {
-            this.angle = this.accessory.getService('Angle') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Angle', 'CataNicoGaTa-59');
-            this.angle.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.angle.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Angle');
-            this.angle.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Angle GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Angle SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('ANGLE')]);
-                    }
-                    setTimeout(() => {
-                        this.angle.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
-        if (this.config.recentB === true) {
-            this.recentB = this.accessory.getService('Recent') ||
-                this.accessory.addService(this.platform.Service.Switch, 'Recent', 'CataNicoGaTa-X09');
-            this.recentB.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
-            this.recentB.setCharacteristic(this.platform.Characteristic.ConfiguredName, 'Recent');
-            this.recentB.getCharacteristic(this.platform.Characteristic.On)
-                .on('get', (callback) => {
-                    this.platform.log.debug('Recent GET On');
-                    let currentValue = false;
-                    callback(null, currentValue);
-                })
-                .on('set', (value, callback) => {
-                    this.platform.log.debug('Recet SET On:', value);
-                    if (value === true) {
-                        this.sending([this.pressedButton('RECENT')]);
-                    }
-                    setTimeout(() => {
-                        this.recentB.updateCharacteristic(this.platform.Characteristic.On, false);
-                    }, this.statelessTimeOut);
-                    callback(null);
-                });
-        }
+        this.buildStatelessSwitches();
         if (this.config.remainMovieTimer) {
             this.movieTimer = accessory.getService(this.platform.Service.Valve) || accessory.addService(this.platform.Service.Valve, 'Dune HD Movie Timer', 'Movie Timer');
             this.movieTimer.setCharacteristic(this.platform.Characteristic.Name, 'Dune HD Movie Timer');
@@ -1585,151 +621,17 @@ class duneHDAccessory {
 
         }
         ///////////////Clean up. Delete services not in used////////////////////////////////
-        if (this.config.remainMovieTimer === false) {
-            this.accessory.removeService(this.movieTimer);
-        }
-        if (this.config.powerB === false) {
-            this.accessory.removeService(this.service);
-        }
-        if (this.config.movieControl === false) {
-            this.accessory.removeService(this.movieControlL);
-            this.accessory.removeService(this.movieControlF);
-        }
-        if (this.config.cursorUpB === false) {
-            this.accessory.removeService(this.cursorUp);
-        }
-        if (this.config.cursorLeftB === false) {
-            this.accessory.removeService(this.cursorLeft);
-        }
-        if (this.config.cursorDownB === false) {
-            this.accessory.removeService(this.cursorDown);
-        }
-        if (this.config.cursorRightB === false) {
-
-            this.accessory.removeService(this.cursorRight);
-        }
-        if (this.config.cursorEnterB === false) {
-
-            this.accessory.removeService(this.cursorEnter);
-        }
-        if (this.config.searchB === false) {
-            this.accessory.removeService(this.searchB);
-        }
-        if (this.config.backButtonB === false) {
-            this.accessory.removeService(this.backButton);
-        }
-        if (this.config.infoB === false) {
-            this.accessory.removeService(this.infoButton);
-        }
-        if (this.config.goToB === false) {
-            this.accessory.removeService(this.goTo);
-        }
-        if (this.config.pageDownB === false) {
-            this.accessory.removeService(this.pageDown);
-        }
-        if (this.config.pageUpB === false) {
-            this.accessory.removeService(this.pageUp);
-        }
-        if (this.config.popUpMenuB === false) {
-            this.accessory.removeService(this.popUpMenu);
-        }
-        if (this.config.mediaButtons === false) {
-            this.accessory.removeService(this.previous);
-            this.accessory.removeService(this.next);
-            this.accessory.removeService(this.rewindButton);
-            this.accessory.removeService(this.forwardButton);
-        }
-        if (this.config.redB === false) {
-            this.accessory.removeService(this.red);
-        }
-        if (this.config.blueB === false) {
-            this.accessory.removeService(this.blue);
-        }
-        if (this.config.yellowB === false) {
-            this.accessory.removeService(this.yellow);
-        }
-        if (this.config.greenB === false) {
-            this.accessory.removeService(this.green);
-        }
-        if (this.config.audioB === false) {
-            this.accessory.removeService(this.audio);
-        }
-        if (this.config.subtitleB === false) {
-            this.accessory.removeService(this.subtitle);
-        }
-        if (this.config.repeatB === false) {
-            this.accessory.removeService(this.repeat);
-        }
-        if (this.config.pipB === false) {
-            this.accessory.removeService(this.pip);
-        }
-        if (this.config.selectB === false) {
-            this.accessory.removeService(this.selectB);
-        }
-        if (this.config.muteB === false) {
-            this.accessory.removeService(this.mute);
-        }
-        if (this.config.recordB === false) {
-            this.accessory.removeService(this.record);
-        }
-        if (this.config.movieB === false) {
-            this.accessory.removeService(this.movie);
-        }
-        if (this.config.musicB === false) {
-            this.accessory.removeService(this.music);
-        }
-        if (this.config.tvB === false) {
-            this.accessory.removeService(this.tvB);
-        }
-        if (this.config.ejectB === false) {
-            this.accessory.removeService(this.ejectB);
-        }
-        if (this.config.modeB === false) {
-            this.accessory.removeService(this.modeB);
-        }
-        if (this.config.slowB === false) {
-            this.accessory.removeService(this.slowB);
-        }
-        if (this.config.mouseB === false) {
-            this.accessory.removeService(this.mouseB);
-        }
-        if (this.config.clearB === false) {
-            this.accessory.removeService(this.clear);
-        }
-        if (this.config.zoomB === false) {
-            this.accessory.removeService(this.zoom);
-        }
-        if (this.config.setupB === false) {
-            this.accessory.removeService(this.setup);
-        }
-        if (this.config.topMenuB === false) {
-            this.accessory.removeService(this.topMenu);
-        }
-        if (this.config.angleB === false) {
-            this.accessory.removeService(this.angle);
-        }
-        if (this.config.recentB === false) {
-            this.accessory.removeService(this.recentB);
-        }
-        if (this.config.volume === false) {
-            this.accessory.removeService(this.volumeDimmer);
-            this.accessory.removeService(this.volumeFan);
-        }
-        if (this.config.changeDimmersToFan === false) {
-            this.accessory.removeService(this.volumeFan);
-            this.accessory.removeService(this.movieControlF);
-        }
-        if (this.config.changeDimmersToFan === true) {
-            this.accessory.removeService(this.volumeDimmer);
-            this.accessory.removeService(this.movieControlL);
-        }
+        this.cleanupDisabledServices();
 
         //////////////////Connecting to Dune HD
         // this.udpServer();
         //syncing////////////////////////////////////////////////////////////////////////////////////////
         setInterval(() => {
             if (this.turnOffCommand === false && this.turnOnCommand === false) {
-                this.sending([this.query('GET DEVICE INFO')]);
+                // Avoid overlapping poll requests when network/device responses are delayed.
+                if (this.pollInFlight !== true) {
+                    this.sending([this.query('GET DEVICE INFO')]);
+                }
                 if (this.httpNotResponding >= this.reconnectionTry) {
                     if (this.turnOffAllUsed === false) {
                         this.turnOffAll();
@@ -1794,6 +696,7 @@ class duneHDAccessory {
                     //this.videoAudioElapseTime.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaInformation);
                     this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaInformation);
                 }
+
             }
             else {
                 setTimeout(() => {
@@ -1802,81 +705,238 @@ class duneHDAccessory {
                 }, 3000);
             }
         }, this.config.pollingInterval);
+        setInterval(() => {
+            if (this.tvService.getCharacteristic(this.platform.Characteristic.Active).value === 1 && this.playBackState[0] === true) {
+            }
+        }, 120000);
     }
 
-    ///////////////Wake up/////
-    /////
+    // Declares all TV input sources in one place and builds/links each service from a definition object.
 
-    ///////Handlers////////////////////////////////////////////////////////////////////////////////////////
-    setOn(value, callback) {
-        let duneHDState = value;
-        if (duneHDState === true) {
-            this.newPowerState(true);
-            this.turnOnCommand = true;
-            this.turnOffCommand = false;
-            this.sending([this.pressedButton('POWER ON')]);
+
+    buildDualModeRangeService({
+        serviceName,
+        lightPropertyName,
+        fanPropertyName,
+        lightUniqueId,
+        fanUniqueId,
+        stateGetter,
+        onStateSet,
+        valueGetter,
+        onValueSet,
+        setNameCharacteristic = false,
+    }) {
+        const usesFanMode = this.config.changeDimmersToFan === true;
+        const propertyName = usesFanMode ? fanPropertyName : lightPropertyName;
+        const serviceType = usesFanMode ? this.platform.Service.Fanv2 : this.platform.Service.Lightbulb;
+        const uniqueId = usesFanMode ? fanUniqueId : lightUniqueId;
+        const stateCharacteristic = usesFanMode ? this.platform.Characteristic.Active : this.platform.Characteristic.On;
+        const valueCharacteristic = usesFanMode ? this.platform.Characteristic.RotationSpeed : this.platform.Characteristic.Brightness;
+        const service = this.accessory.getService(serviceName)
+            || this.accessory.addService(serviceType, serviceName, uniqueId);
+        if (setNameCharacteristic === true) {
+            service.setCharacteristic(this.platform.Characteristic.Name, serviceName);
         }
-        else {
-            this.sending([this.pressedButton('STOP')]);
-            this.turnOffAll();
-            this.newPowerState(false);
-            this.turnOffCommand = true;
-            this.turnOnCommand = false;
-            setTimeout(() => {
-                this.sending([this.pressedButton('POWER OFF')]);
-            }, 1000);
-            //this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=standby&result_syntax=json"]);
-            //this.sending([this.pressedButton('POWER OFF')]);
+        service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+        service.setCharacteristic(this.platform.Characteristic.ConfiguredName, serviceName);
+        service.getCharacteristic(stateCharacteristic)
+            .on('get', (callback) => {
+                const currentState = stateGetter();
+                if (usesFanMode) {
+                    callback(null, currentState === true ? 1 : 0);
+                    return;
+                }
+                callback(null, currentState);
+            })
+            .on('set', (newValue, callback) => {
+                onStateSet(newValue, usesFanMode);
+                callback(null);
+            });
+        service.getCharacteristic(valueCharacteristic)
+            .on('get', (callback) => {
+                callback(null, valueGetter());
+            })
+            .on('set', (newValue, callback) => {
+                onValueSet(newValue, usesFanMode);
+                callback(null);
+            });
+        this[propertyName] = service;
+        return service;
+    }
+
+    buildInputSources() {
+        const currentShown = this.platform.Characteristic.CurrentVisibilityState.SHOWN;
+        const currentHidden = this.platform.Characteristic.CurrentVisibilityState.HIDDEN;
+        const targetShown = this.platform.Characteristic.TargetVisibilityState.SHOWN;
+        const targetHidden = this.platform.Characteristic.TargetVisibilityState.HIDDEN;
+        const showMediaDetails = this.showState ? currentShown : currentHidden;
+        const showMediaDetailsTarget = this.showState ? targetShown : targetHidden;
+        const inputSourceDefinitions = [
+            {
+                propertyName: 'videoAudioTitle',
+                serviceName: 'Media Title',
+                uniqueId: 'CataNicoGaTa-1003',
+                identifier: 1,
+                configuredName: () => this.inputName,
+                inputSourceType: this.platform.Characteristic.InputSourceType.APPLICATION,
+                currentVisibility: currentShown,
+                onGet: () => this.inputName,
+                logOnGet: true,
+            },
+            {
+                propertyName: 'runtime',
+                serviceName: 'Runtime',
+                uniqueId: 'CataNicoGaTa-1004',
+                identifier: 2,
+                configuredName: () => this.mediaDuration,
+                inputSourceType: this.platform.Characteristic.InputSourceType.HDMI,
+                currentVisibility: currentShown,
+                onGet: () => this.mediaDuration,
+                logOnGet: true,
+            },
+            {
+                propertyName: 'videoAudioElapseTime',
+                serviceName: 'Video Information',
+                uniqueId: 'CataNicoGaTa-1005',
+                identifier: 4,
+                configuredName: () => this.mediaInformation,
+                inputSourceType: this.platform.Characteristic.InputSourceType.HDMI,
+                targetVisibility: targetHidden,
+                currentVisibility: currentHidden,
+                onGet: () => this.mediaInformation,
+                logOnGet: true,
+            },
+            {
+                propertyName: 'currentChaper',
+                serviceName: 'Current Chapter',
+                uniqueId: 'CataNicoGaTa-4005',
+                identifier: 3,
+                configuredName: () => this.mediaChapter,
+                inputSourceType: this.platform.Characteristic.InputSourceType.HDMI,
+                targetVisibility: showMediaDetailsTarget,
+                currentVisibility: showMediaDetails,
+                onGet: () => this.mediaChapter,
+                logOnGet: true,
+            },
+            {
+                propertyName: 'audioFormat',
+                serviceName: 'Audio Format',
+                uniqueId: 'CataNicoGaTa-4006',
+                identifier: 5,
+                configuredName: () => this.mediaAudioFormat,
+                inputSourceType: this.platform.Characteristic.InputSourceType.HDMI,
+                targetVisibility: showMediaDetailsTarget,
+                currentVisibility: showMediaDetails,
+                onGet: () => this.mediaAudioFormat,
+                logOnGet: true,
+            },
+            {
+                propertyName: 'audioLanguage',
+                serviceName: 'Audio Language',
+                uniqueId: 'CataNicoGaTa-4007',
+                identifier: 6,
+                configuredName: () => this.language,
+                inputSourceType: this.platform.Characteristic.InputSourceType.HDMI,
+                targetVisibility: showMediaDetailsTarget,
+                currentVisibility: showMediaDetails,
+                onGet: () => this.language,
+                logOnGet: true,
+            },
+        ];
+        for (const definition of inputSourceDefinitions) {
+            this.getOrCreateInputSource(definition);
         }
-        this.platform.log.debug('Set Power to ->', value);
-        callback(null);
     }
-    getOn(callback) {
-        let isOn = this.powerState;
-        this.platform.log.debug('Get Power ->', isOn);
-        callback(null, isOn);
+
+    buildMovieProgressService() {
+        this.buildDualModeRangeService({
+            serviceName: 'Media Progress',
+            lightPropertyName: 'movieControlL',
+            fanPropertyName: 'movieControlF',
+            lightUniqueId: 'CataNicoGaTa-301',
+            fanUniqueId: 'CataNicoGaTa-301F',
+            setNameCharacteristic: true,
+            stateGetter: () => this.currentMovieProgressState,
+            onStateSet: (newValue) => {
+                this.platform.log('Movie progress state set to: ' + newValue);
+            },
+            valueGetter: () => this.currentMovieProgress,
+            onValueSet: (newValue) => {
+                this.setMovieSeekPositionFromPercent(newValue);
+                this.platform.log('Movie progress set to: ' + newValue + '%');
+            },
+        });
     }
-    ///////////////////////////////////////////////////////////////////////////////////////////////////Play
-    playSwitchStateGet(callback) {
-        this.platform.log.debug('Play State');
-        let currentValue = this.playBackState[0];
-        callback(null, currentValue);
-    }
-    playSwitchStateSet(value, callback) {
-        this.platform.log.debug('Play set to:', value);
-        if (value === true) {
-            this.sending([this.pressedButton('PLAY')]);
+
+    buildStatelessSwitches() {
+        for (const definition of this.getStatelessSwitchConfigs()) {
+            if (this.config[definition.configKey] === true) {
+                this.createStatelessSwitch(definition);
+            }
         }
-        callback(null);
     }
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////Pause
-    pauseSwitchStateGet(callback) {
-        this.platform.log.debug('Pause State');
-        let currentValue = this.playBackState[1];
-        callback(null, currentValue);
+
+    buildVolumeControlService() {
+        this.buildDualModeRangeService({
+            serviceName: 'Dune HD Volume',
+            lightPropertyName: 'volumeDimmer',
+            fanPropertyName: 'volumeFan',
+            lightUniqueId: 'CataNicoGaT-98',
+            fanUniqueId: 'CataNicoGaT-98F',
+            stateGetter: () => this.currentVolumeSwitch,
+            onStateSet: (newValue, usesFanMode) => {
+                const shouldUnmute = usesFanMode ? newValue === 1 : newValue === true;
+                if (shouldUnmute) {
+                    this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state_&mute=0&result_syntax=json"]);
+                    this.platform.log('Volume Value set to: Unmute');
+                    return;
+                }
+                this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&mute=1&result_syntax=json"]);
+                this.platform.log('Volume Value set to: Mute');
+            },
+            valueGetter: () => this.currentVolume,
+            onValueSet: (newValue) => {
+                this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&volume=" + newValue + "&mute=0&result_syntax=json"]);
+                this.platform.log('Volume Value set to: ' + newValue);
+            },
+        });
     }
-    pauseSwitchStateSet(value, callback) {
-        this.platform.log.debug('Pause set to', value);
-        if (value === true) {
-            this.sending([this.pressedButton('PAUSE')]);
+
+    cleanupDisabledServices() {
+        if (this.config.remainMovieTimer === false) {
+            this.safeRemoveService(this.movieTimer);
         }
-        callback(null);
-    }
-    /////////////////////////////////////////////////////////////////////////////////////stop
-    stopSwitchStateGet(callback) {
-        this.platform.log.debug('Stop State');
-        let currentValue = this.playBackState[2];
-        callback(null, currentValue);
-    }
-    stopSwitchStateSet(value, callback) {
-        this.platform.log.debug('Stop set to:', value);
-        if (value === true) {
-            this.mediaDetailsReset();
-            this.sending([this.pressedButton('STOP')]);
+        if (this.config.powerB === false) {
+            this.safeRemoveService(this.service);
         }
-        callback(null);
+        if (this.config.movieControl === false) {
+            this.safeRemoveService(this.movieControlL);
+            this.safeRemoveService(this.movieControlF);
+        }
+        this.cleanupDisabledStatelessSwitches();
+        if (this.config.volume === false) {
+            this.safeRemoveService(this.volumeDimmer);
+            this.safeRemoveService(this.volumeFan);
+        }
+        if (this.config.changeDimmersToFan === false) {
+            this.safeRemoveService(this.volumeFan);
+            this.safeRemoveService(this.movieControlF);
+        }
+        if (this.config.changeDimmersToFan === true) {
+            this.safeRemoveService(this.volumeDimmer);
+            this.safeRemoveService(this.movieControlL);
+        }
     }
-    /////////////////Command Log
+
+    cleanupDisabledStatelessSwitches() {
+        for (const definition of this.getStatelessSwitchConfigs()) {
+            if (this.config[definition.configKey] !== true) {
+                const service = this[definition.propertyName] || this.accessory.getService(definition.serviceName);
+                this.safeRemoveService(service);
+            }
+        }
+    }
+
     commandLog(commandPress) {
         if (commandPress.includes('getDeviceInfo')) {
             this.platform.log.debug(`Sending: ${this.commandName(commandPress)} Command`);
@@ -1885,418 +945,114 @@ class duneHDAccessory {
             this.platform.log(`Sending: ${this.commandName(commandPress)} Command`);
         }
     }
-    ///////Send HTTP command///////////////////////////
-    sending(url) {
-        this.platform.log.debug(url);
-        url = url[0];
-        let key;
-        if (url.includes('cgi-bin/do?cmd=status')) {
-            key = 'getDeviceInfo';
+
+    commandName(keyS) {
+        this.platform.log.debug(keyS);
+        const commandText = typeof keyS === 'string' ? keyS : String(keyS);
+        for (const mapping of COMMAND_NAME_MATCHES) {
+            if (commandText.includes(mapping.token)) {
+                return mapping.label;
+            }
         }
-        else if (url.includes('cgi-bin/do?cmd=standby')) {
-            key = 'Standby';
+        return commandText;
+    }
+
+    createInputSourceService({
+        serviceName,
+        uniqueId,
+        identifier,
+        configuredName,
+        inputSourceType,
+        targetVisibility,
+        currentVisibility,
+    }) {
+        const configuredNameValue = typeof configuredName === 'function' ? configuredName() : configuredName;
+        const service = this.accessory.addService(this.platform.Service.InputSource, serviceName, uniqueId)
+            .setCharacteristic(this.platform.Characteristic.Identifier, identifier)
+            .setCharacteristic(this.platform.Characteristic.ConfiguredName, configuredNameValue)
+            .setCharacteristic(this.platform.Characteristic.IsConfigured, this.platform.Characteristic.IsConfigured.CONFIGURED)
+            .setCharacteristic(this.platform.Characteristic.InputSourceType, inputSourceType);
+        if (typeof targetVisibility !== 'undefined') {
+            service.setCharacteristic(this.platform.Characteristic.TargetVisibilityState, targetVisibility);
         }
-        else if (url.includes('position')) {
-            key = 'position';
+        if (typeof currentVisibility !== 'undefined') {
+            service.setCharacteristic(this.platform.Characteristic.CurrentVisibilityState, currentVisibility);
         }
-        else {
-            let key1 = url.split('=');
-            key = key1[2];
+        return service;
+    }
+
+    createStatefulSwitch({ propertyName, serviceName, uniqueId, onGet, onSet, setNameCharacteristic = false }) {
+        const service = this.accessory.getService(serviceName)
+            || this.accessory.addService(this.platform.Service.Switch, serviceName, uniqueId);
+        if (setNameCharacteristic === true) {
+            service.setCharacteristic(this.platform.Characteristic.Name, serviceName);
+            service.updateCharacteristic(this.platform.Characteristic.Name, serviceName);
         }
-        this.platform.log.debug(url);
-        this.platform.log.debug(key);
-        this.httpNotResponding += 1;
-        request.get(url, (res) => {
-            res.setEncoding('utf8');
-            let rawData = '';
-            res.on('data', (chunk) => { rawData += chunk; });
-            res.on('end', () => {
-                try {
-                    let parsedData = JSON.parse(rawData);
-                    this.httpNotResponding = 0;
-                    this.httpEventDecoder(parsedData, key);
-                } catch (e) {
-                    //console.error(e.message);
+        service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+        service.setCharacteristic(this.platform.Characteristic.ConfiguredName, serviceName);
+        service.getCharacteristic(this.platform.Characteristic.On)
+            .on('get', onGet)
+            .on('set', onSet);
+        this[propertyName] = service;
+        return service;
+    }
+
+    createStatelessSwitch({ propertyName, serviceName, uniqueId, commandName }) {
+        const service = this.accessory.getService(serviceName)
+            || this.accessory.addService(this.platform.Service.Switch, serviceName, uniqueId);
+        service.addOptionalCharacteristic(this.platform.Characteristic.ConfiguredName);
+        service.setCharacteristic(this.platform.Characteristic.ConfiguredName, serviceName);
+        service.getCharacteristic(this.platform.Characteristic.On)
+            .on('get', (callback) => {
+                this.platform.log.debug(`${serviceName} GET On`);
+                callback(null, false);
+            })
+            .on('set', (value, callback) => {
+                this.platform.log.debug(`${serviceName} SET On:`, value);
+                if (value === true) {
+                    this.sending([this.pressedButton(commandName)]);
                 }
+                setTimeout(() => {
+                    service.updateCharacteristic(this.platform.Characteristic.On, false);
+                }, this.statelessTimeOut);
+                callback(null);
             });
-        }).on('error', (e) => {
-            // console.error(`Got error: ${e.message}`);
-        });
+        this[propertyName] = service;
+        return service;
     }
-    //////////Current Status//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    newVolumeStatus(newVolumeNum) {
-        if (this.turnOffCommand !== true || newVolumeNum === 0) {
 
-            if (this.currentVolume !== newVolumeNum) {
-                this.currentVolume = newVolumeNum;
-                if (newVolumeNum === 0) {
-                    this.currentMuteState = true;
-                    this.currentVolumeSwitch = false;
-                }
-                if (newVolumeNum !== 0) {
-                    this.currentMuteState = false;
-                    this.currentVolumeSwitch = true;
-                }
-                this.speakerService.updateCharacteristic(this.platform.Characteristic.Volume, this.currentVolume);
-                this.speakerService.updateCharacteristic(this.platform.Characteristic.Mute, this.currentMuteState);
-                // this.speakerService.getCharacteristic(this.platform.Characteristic.Volume).updateValue(this.currentVolume);
-                // this.speakerService.getCharacteristic(this.platform.Characteristic.Mute).updateValue(this.currentMuteState)
-                if (this.config.volume === true) {
-                    if (this.config.changeDimmersToFan === false) {
-                        this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentVolume);
-                        //this.volumeDimmer.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentVolume);
-                        this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.On, this.currentVolumeSwitch);
-                        //this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentVolumeSwitch);
+    getOn(callback) {
+        let isOn = this.powerState;
+        this.platform.log.debug('Get Power ->', isOn);
+        callback(null, isOn);
+    }
+
+    getOrCreateInputSource(definition) {
+        const existingService = this.accessory.getService(definition.existingServiceName || definition.serviceName)
+            || this.accessory.getService(definition.serviceName);
+        const service = existingService || this.createInputSourceService(definition);
+        if (typeof definition.onGet === 'function') {
+            service.getCharacteristic(this.platform.Characteristic.ConfiguredName)
+                .on('get', (callback) => {
+                    const currentValue = definition.onGet();
+                    if (definition.logOnGet === true) {
+                        this.platform.log.debug('Getting' + currentValue);
                     }
-                    else {
-                        this.volumeFan.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.currentVolume);
-                        // this.volumeFan.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentVolume);
-                        this.volumeFan.updateCharacteristic(this.platform.Characteristic.Active, this.currentVolumeSwitch === true ? 1 : 0);
-                        // this.volumeFan.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentVolumeSwitch === true ? 1 : 0);
-                    }
-                }
-            }
+                    callback(null, currentValue);
+                });
         }
+        this.tvService.addLinkedService(service);
+        this[definition.propertyName] = service;
+        return service;
     }
 
-    newAudioStatus(audio) {
-        this.platform.log.debug(audio);
-        let newAudio = '';
-        if (audio.includes('Digital Plus')) {
-            newAudio = 'Dolby Digital Plus - Atmos';
-        }
-        else if (audio.includes('Dolby Digital')) {
-            newAudio = 'Dolby Digital';
-        }
-        else if (audio.includes('TrueHD')) {
-            newAudio = 'Dolby TrueHD - Atmos';
-        }
-        else if (audio.includes('DTS-HD High') || audio.includes('DTS HD High')) {
-            newAudio = 'DTS-HD High Resolution';
-        }
-        else if (audio.includes('DTS HD Master') || audio.includes('DTS HD MA')) {
-            newAudio = 'DTS HD MA - DTS X';
-        }
-        else if (audio.includes('DTS')) {
-            newAudio = 'DTS';
-        }
-        else if (audio.includes('LPCM')) {
-            newAudio = 'LPCM';
-        }
-        else if (audio.includes('MPEG')) {
-            newAudio = 'MPEG Audio';
-
-        }
-        else if (audio.includes('CD Audio')) {
-            newAudio = 'CD Audio';
-
-        }
-        else {
-            newAudio = audio;
-
-        }
-        this.newAudioFormat(newAudio);
+    getStatelessSwitchConfigs() {
+        return STATELESS_SWITCH_CONFIGS;
     }
 
-    newInputName(newName) {
-        if (typeof newName !== 'undefined') {
-            if (newName.includes('.iso') || newName.includes('.ISO') || newName.includes('.MKV') || newName.includes('.mkv') || newName.includes('.MP4') || newName.includes('.mp4') || newName.includes('.MP3') || newName.includes('.mp3')) {
-                newName = newName.substring(0, newName.length - 4);
-            }
-            if (newName.length >= 64) {
-                newName = newName.slice(0, 60) + "...";
-            }
-            this.platform.log.debug('New input name: ' + newName);
-            if (this.inputName !== newName) {
-                this.inputName = newName;
-                this.platform.log.debug(this.inputName);
-                this.videoAudioTitle.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName);
-                // this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.inputName);
-            }
-        }
-
-    }
-    newInputDuration(newDuration) {
-        if (typeof newDuration !== 'undefined') {
-            this.platform.log.debug('New input duraiton: ' + newDuration);
-            if (!newDuration.includes('Runtime')) {
-                let hourMintue = ''
-                if (this.movieRemaining > 3600) {
-                    hourMintue = 'Hours';
-                }
-                else if (this.movieRemaining == 3600) {
-                    hourMintue = 'Hour';
-                }
-                else {
-                    hourMintue = 'Minutes';
-                }
-                this.mediaDuration = 'Runtime: ' + newDuration + ' ' + hourMintue;
-            }
-            else {
-                this.mediaDuration = newDuration;
-            }
-            if (this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaDuration) {
-                this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration)
-            }
-        }
-    }
-    newCurrentChapter(currentChapter) {
-        if (typeof currentChapter !== 'undefined') {
-            if (currentChapter.length >= 64) {
-                currentChapter = currentChapter.slice(0, 60) + "...";
-            }
-            this.platform.log.debug('New input progress: ' + currentChapter);
-            if (this.mediaChapter !== currentChapter) {
-                this.mediaChapter = currentChapter;
-                this.currentChaper.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter);
-                //this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
-                this.currentChaper.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
-                this.currentChaper.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-            }
-        }
-    }
-    newVideoInformation(videoFormat) {
-        if (typeof videoFormat !== 'undefined') {
-            this.platform.log.debug(videoFormat);
-            if (this.mediaInformation !== videoFormat) {
-                this.mediaInformation = videoFormat;
-                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaInformation);
-                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
-                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-            }
-        }
-
-    }
-    newAudioFormat(audioType) {
-        if (typeof audioType !== 'undefined') {
-            this.platform.log.debug('New audio format: ' + audioType);
-            if (this.mediaAudioFormat !== audioType) {
-                this.mediaAudioFormat = audioType;
-                this.audioFormat.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat);
-                //this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
-                this.audioFormat.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
-                this.audioFormat.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-            }
-        }
-    }
-    newLanguageSelector(langSelector) {
-        let correctLanguage = ''
-        if (langSelector.includes('eng')) {
-            correctLanguage = 'English';
-        }
-        else if (langSelector.includes('ara')) {
-            correctLanguage = 'Arabic';
-        }
-        else if (langSelector.includes('cat')) {
-            correctLanguage = 'Catalan';
-        }
-        else if (langSelector.includes('chi') || langSelector.includes('zho')) {
-            correctLanguage = 'Chinese';
-        }
-        else if (langSelector.includes('ces') || langSelector.includes('cze')) {
-            correctLanguage = 'Czech';
-        }
-        else if (langSelector.includes('dan')) {
-            correctLanguage = 'Danish';
-        }
-        else if (langSelector.includes('deu') || langSelector.includes('gmh') || langSelector.includes('goh')) {
-            correctLanguage = 'German';
-        }
-        else if (langSelector.includes('dum') || langSelector.includes('dut')) {
-            correctLanguage = 'Dutch';
-        }
-        else if (langSelector.includes('egy')) {
-            correctLanguage = 'Egyptina';
-        }
-        else if (langSelector.includes('ell') || langSelector.includes('grc') || langSelector.includes('gre')) {
-            correctLanguage = 'Greek';
-        }
-        else if (langSelector.includes('fin')) {
-            correctLanguage = 'Finnish';
-        }
-        else if (langSelector.includes('fra') || langSelector.includes('fre') || langSelector.includes('frm') || langSelector.includes('fro')) {
-            correctLanguage = 'French';
-        }
-        else if (langSelector.includes('heb')) {
-            correctLanguage = 'Hebrew';
-        }
-        else if (langSelector.includes('hin')) {
-            correctLanguage = 'Hindi';
-        }
-        else if (langSelector.includes('hrv')) {
-            correctLanguage = 'Croatina';
-        }
-        else if (langSelector.includes('hun')) {
-            correctLanguage = 'Hungarian';
-        }
-        else if (langSelector.includes('ice') || langSelector.includes('isl')) {
-            correctLanguage = 'Icelandic';
-        }
-        else if (langSelector.includes('ita')) {
-            correctLanguage = 'Italian';
-        }
-        else if (langSelector.includes('jpn')) {
-            correctLanguage = 'Japanese';
-        }
-        else if (langSelector.includes('kor')) {
-            correctLanguage = 'Korian';
-        }
-        else if (langSelector.includes('peo') || langSelector.includes('per')) {
-            correctLanguage = 'Perian';
-        }
-        else if (langSelector.includes('pol')) {
-            correctLanguage = 'Polish';
-        }
-        else if (langSelector.includes('por')) {
-            correctLanguage = 'Portuguese';
-        }
-        else if (langSelector.includes('rus')) {
-            correctLanguage = 'Russian';
-        }
-        else if (langSelector.includes('ron') || langSelector.includes('run')) {
-            correctLanguage = 'Romanian';
-        }
-        else if (langSelector.includes('spa')) {
-            correctLanguage = 'Spanish';
-        }
-        else if (langSelector.includes('tur')) {
-            correctLanguage = 'Turkish';
-        }
-        else if (langSelector.includes('und')) {
-            correctLanguage = 'Language Undefined';
-        }
-        else {
-            correctLanguage = 'Language Undefined';
-        }
-        return correctLanguage;
-
-    }
-    newLanguage(lang) {
-        if (typeof lang !== 'undefined') {
-            this.platform.log.debug('New audio language: ' + lang);
-            if (this.language !== lang) {
-                this.language = lang;
-                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.language);
-                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
-                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
-            }
-        }
-    }
-    newMovieTime(newMovieTime) {
-        if (this.showState === true || newMovieTime === 0 || this.bluryaDVD === true) {
-            if (newMovieTime === 0) {
-                this.currentMovieProgressState = false;
-                this.currentMovieProgress = 0;
-            }
-            if (newMovieTime !== 0) {
-                this.currentMovieProgressState = true;
-            }
-            if (this.movieRemaining !== 0) {
-                this.currentMovieProgress = Math.round(newMovieTime * 100 / (this.movieRemaining));
-            }
-            if (this.currentMovieProgressState === true && this.currentMovieProgress === 0) {
-                this.currentMovieProgress = 1;
-            }
-            if (this.currentMovieProgress > 100) { this.currentMovieProgress = 100 }
-            if (this.config.movieControl === true) {
-                if (this.config.changeDimmersToFan === false) {
-                    if (this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).value !== this.currentMovieProgress) {
-                        this.movieControlL.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentMovieProgress);
-                        // this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentMovieProgress);
-                        this.movieControlL.updateCharacteristic(this.platform.Characteristic.On, this.currentMovieProgressState);
-                        //this.movieControlL.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentMovieProgressState);
-                    }
-                }
-                else {
-                    if (this.movieControlF.getCharacteristic(this.platform.Characteristic.RotationSpeed).value !== this.currentMovieProgress) {
-                        this.movieControlF.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.currentMovieProgress);
-                        // this.movieControlF.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentMovieProgress);
-                        this.movieControlF.updateCharacteristic(this.platform.Characteristic.Active, this.currentMovieProgressState === true ? 1 : 0);
-                        //this.movieControlF.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentMovieProgressState === true ? 1 : 0);
-                    }
-                }
-            }
-            if (this.config.remainMovieTimer) {
-                if (this.movieTimer.getCharacteristic(this.platform.Characteristic.Active).value != this.currentMovieProgressState ? 1 : 0) {
-                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.Active, this.currentMovieProgressState ? 1 : 0);
-                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.InUse, this.currentMovieProgressState ? 1 : 0);
-                }
-                if (this.movieElapsed !== this.movieTimer.getCharacteristic(this.platform.Characteristic.RemainingDuration).value) {
-                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.RemainingDuration, this.movieElapsed);
-                }
-                if (this.movieRemaining !== this.movieTimer.getCharacteristic(this.platform.Characteristic.SetDuration).value) {
-                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.SetDuration, this.movieRemaining);
-                }
-            }
-        }
-    }
-    newPowerState(newValue) {
-        if (this.turnOffCommand === false && this.turnOnCommand === false) {
-            if (newValue === true) {
-                this.powerStateTV = 1;
-            }
-            else {
-                this.powerStateTV = 0;
-            }
-            if (this.powerSate !== newValue) {
-                this.powerState = newValue;
-                this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
-                //this.tvService.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.powerStateTV);
-                if (this.config.powerB === true) {
-                    this.service.updateCharacteristic(this.platform.Characteristic.On, this.powerState);
-                    //this.service.getCharacteristic(this.platform.Characteristic.On).updateValue(this.powerState);
-                }
-            }
-        }
-    }
-    newPlayBackState(newPlay) {
-        this.playBackState = newPlay;
-        if (this.turnOffCommand == false || this.playBackState == [false, false, false]) {
-            if (this.playBackState[0] === true) {
-                this.mediaState = 0;
-            }
-            if (this.playBackState[1] === true) {
-                this.mediaState = 1;
-            }
-            if (this.playBackState[2] === true) {
-                this.mediaState = 2;
-            }
-            if (this.playBackState[0] === false && this.playBackState[1] === false && this.playBackState[2] === false) {
-                this.mediaState = 4;
-            }
-
-            if (this.tvService.getCharacteristic(this.platform.Characteristic.Active).value !== this.powerStateTV) {
-                this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
-            }
-            if (this.play.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[0]) {
-                this.play.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[0]);
-                // this.play.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[0]);
-                this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
-            }
-            if (this.pause.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[1]) {
-                this.pause.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[1]);
-                // this.pause.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[1]);
-                this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
-            }
-            if (this.stop.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[2]) {
-                this.stop.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[2]);
-                //this.stop.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[2]);
-                this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
-                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
-            }
-        }
-    }
-    newInputState(newInput) {
-        this.inputID = newInput;
-        this.tvService.updateCharacteristic(this.platform.Characteristic.ActiveIdentifier, this.inputID);
-        // this.tvService.getCharacteristic(this.platform.Characteristic.ActiveIdentifier).updateValue(this.inputID);
-    }
-    /////////////////HTTP Event decoder
     httpEventDecoder(rawData, key) {
         //this.platform.log(`${key} Sent by HTTP`);
-        // this.platform.log(rawData);
+        //this.platform.log(rawData);
         //this.platform.log(key);
         if (key.includes('getDeviceInfo') || key.includes('volume') || key.includes('mute') || key.includes('position')) {
             this.platform.log.debug(`Response: ${this.commandName(key)} Command Executed`);
@@ -2304,7 +1060,7 @@ class duneHDAccessory {
         else {
             if (rawData.command_status === "ok") {
                 this.platform.log(`Response: ${this.commandName(key)} Command Executed`);
-                if (key.includes('A057')) {
+                if (key.includes('A05F')) {
                     this.newPowerState(true);
                 }
             }
@@ -2371,7 +1127,7 @@ class duneHDAccessory {
             }
             if (typeof rawData.playback_volume !== 'undefined') {
                 if (rawData.playback_mute === '0') {
-                    this.newVolumeStatus(parseInt(rawData.playback_volume));
+                    this.newVolumeStatus(this.toInt(rawData.playback_volume, 0));
                 }
                 else {
                     this.newVolumeStatus(0);
@@ -2389,7 +1145,7 @@ class duneHDAccessory {
             // if (rawData.player_state === "bluray_playback" || rawData.player_state === "dvd_playback"||rawData.player_state === "file_playback") {
             if (rawData.player_state === "bluray_playback" || rawData.player_state === "dvd_playback") {
                 this.bluryaDVD = true;
-                this.newVolumeStatus(100);
+                this.newVolumeStatus(this.toInt(rawData.playback_volume, 0));
                 if (rawData.playback_speed === "0") {
                     this.newPlayBackState([false, true, false]);
                     //this.showState = true;
@@ -2403,8 +1159,8 @@ class duneHDAccessory {
                 }
                 ///////Media runtime////////////////////
                 // this.platform.log('Playback duration: ' + rawData.playback_duration);
-                this.movieRemaining = parseInt(rawData.playback_duration);
-                let runtimeNumber = this.secondsToTime(parseInt(rawData.playback_duration));
+                this.movieRemaining = this.toInt(rawData.playback_duration, 0);
+                let runtimeNumber = this.secondsToTime(this.movieRemaining);
                 if (runtimeNumber.startsWith('0')) {
                     runtimeNumber = runtimeNumber.substring(1);
                 }
@@ -2412,7 +1168,7 @@ class duneHDAccessory {
                 if (typeof rawData.playback_duration != 'undefined' && typeof rawData.playback_position != 'undefined') {
                     //////////////////Media Current position
                     // this.platform.log('Playback position: ' + rawData.playback_position);
-                    this.currentMoviePosition = parseInt(rawData.playback_position);
+                    this.currentMoviePosition = this.toInt(rawData.playback_position, 0);
                     let movieElapsed1 = this.movieRemaining - this.currentMoviePosition
                     if (movieElapsed1 < 0) {
                         this.movieElapsed = 0;
@@ -2420,7 +1176,7 @@ class duneHDAccessory {
                     else {
                         this.movieElapsed = movieElapsed1
                     }
-                    this.newMovieTime(parseInt(rawData.playback_position));
+                    this.newMovieTime(this.currentMoviePosition);
                 }
             }
             else if (typeof rawData.playback_state === 'undefined' || rawData.playback_state === 'deinitializing') {
@@ -2432,7 +1188,7 @@ class duneHDAccessory {
                     //////////////////////Media Name///////////////////////////////
                     if (typeof rawData.playback_url !== 'undefined') {
                         //this.platform.log('Playback url 1: ' + rawData.playback_url);
-                        if (rawData.is_video == '1') {
+                        if (rawData.is_video === '1') {
                             // this.platform.log("Movie details")
                             let newNameInput = rawData.playback_url.split('/');
                             let nameInput = '';
@@ -2572,14 +1328,14 @@ class duneHDAccessory {
                     }
                     ///////Media runtime////////////////////
                     // this.platform.log('Playback duration: ' + rawData.playback_duration);
-                    this.movieRemaining = parseInt(rawData.playback_duration);
-                    let runtimeNumber = this.secondsToTime(parseInt(rawData.playback_duration));
+                    this.movieRemaining = this.toInt(rawData.playback_duration, 0);
+                    let runtimeNumber = this.secondsToTime(this.movieRemaining);
                     if (runtimeNumber.startsWith('0')) {
                         runtimeNumber = runtimeNumber.substring(1);
                     }
                     this.newInputDuration(runtimeNumber);
                     if (typeof rawData.playback_duration != 'undefined' && typeof rawData.playback_position != 'undefined') {
-                        this.currentMoviePosition = parseInt(rawData.playback_position);
+                        this.currentMoviePosition = this.toInt(rawData.playback_position, 0);
                         let movieElapsed1 = this.movieRemaining - this.currentMoviePosition
                         if (movieElapsed1 < 0) {
                             this.movieElapsed = 0;
@@ -2589,27 +1345,27 @@ class duneHDAccessory {
                         }
                         //////////////////Media Current position
                         //this.platform.log('Playback position: ' + rawData.playback_position);
-                        this.newMovieTime(parseInt(rawData.playback_position));
+                        this.newMovieTime(this.currentMoviePosition);
                     }
                     ////////////////////Media Information////////////////////////////
 
-                    let videoWitdth = parseInt(rawData.playback_video_width);
-                    let videoHeight = parseInt(rawData.playback_video_height);
-                    let currentBitrate = Math.round(parseInt(rawData.playback_current_bitrate) / 10000) / 100;
-                    if (parseInt(rawData.playback_video_height) >= 2160) {
-                        this.newVideoInformation('4K Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    let videoWitdth = this.toInt(rawData.playback_video_width, 0);
+                    let videoHeight = this.toInt(rawData.playback_video_height, 0);
+                    let currentBitrate = Math.round(this.toInt(rawData.playback_current_bitrate, 0) / 10000) / 100;
+                    if (videoHeight >= 2160) {
+                        this.newVideoInformation('4K Video (' + videoWitdth + 'x' + videoHeight + 'p) at ' + currentBitrate + 'Mbps')
                     }
-                    else if (parseInt(rawData.playback_video_height) > 1080) {
-                        this.newVideoInformation('UHD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    else if (videoHeight > 1080) {
+                        this.newVideoInformation('UHD Video (' + videoWitdth + 'x' + videoHeight + 'p) at ' + currentBitrate + ' Mbps')
                     }
-                    else if (parseInt(rawData.playback_video_height) == 1080) {
-                        this.newVideoInformation('Full HD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    else if (videoHeight === 1080) {
+                        this.newVideoInformation('Full HD Video (' + videoWitdth + 'x' + videoHeight + 'p) at ' + currentBitrate + 'Mbps')
                     }
-                    else if (parseInt(rawData.playback_video_height) == 720) {
-                        this.newVideoInformation('HD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                    else if (videoHeight === 720) {
+                        this.newVideoInformation('HD Video (' + videoWitdth + 'x' + videoHeight + 'p) at ' + currentBitrate + 'Mbps')
                     }
                     else {
-                        this.newVideoInformation('SD Video (' + videoWitdth + 'x' + videoHeight + ') at ' + currentBitrate + ' Mbps')
+                        this.newVideoInformation('SD Video (' + videoWitdth + 'x' + videoHeight + 'p) at ' + currentBitrate + 'Mbps')
                     }
                     ///////////////Audio format
                     //this.platform.log('Playback audio track: ' + rawData.audio_track);
@@ -2618,11 +1374,11 @@ class duneHDAccessory {
                     }
                     //////////Audio Lnaguage
 
-                    if (rawData.subtitles_track != "-1" || typeof rawData['subtitles_track.' + rawData.subtitles_track + '.lang'] !== 'undefined') {
+                    if (rawData.subtitles_track !== "-1" || typeof rawData['subtitles_track.' + rawData.subtitles_track + '.lang'] !== 'undefined') {
                         this.subtitleLanguage = this.newLanguageSelector(rawData['subtitles_track.' + rawData.subtitles_track + '.lang']);
                     }
                     if (typeof rawData['audio_track.' + rawData.audio_track + '.lang'] !== 'undefined') {
-                        if (this.subtitleLanguage != '') {
+                        if (this.subtitleLanguage !== '') {
                             this.newLanguage('Audio: ' + this.newLanguageSelector(rawData['audio_track.' + rawData.audio_track + '.lang']) + ' (Subtitles in ' + this.subtitleLanguage + ')');
                         }
                         else {
@@ -2633,7 +1389,7 @@ class duneHDAccessory {
                 else {
                 }
             }
-            if (this.newPlayBackState == [false, false, false]) {
+            if (this.playBackState[0] === false && this.playBackState[1] === false && this.playBackState[2] === false) {
                 if (this.counter > 2) {
                     this.mediaDetailsReset();
                     this.counter = 0;
@@ -2645,7 +1401,464 @@ class duneHDAccessory {
             }
         }
     }
-    ///Query////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    mediaDetailsReset() {
+        // this.platform.log("Reset details");
+        this.newInputState(1);
+        this.showState = false;
+        this.movieRemaining = 0;
+        this.movieElapsed = 0;
+        this.currentMoviePosition = 0;
+        this.bluryaDVD = false;
+        this.subtitleLanguage = '';
+        this.newMovieTime(0);
+
+        if (this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== 'Media Title' && !this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value.includes('Last Played: ') && this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== 'Standby') {
+            this.newInputName('Last Played: ' + this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value);
+        }
+        //this.newAudioFormat('Audio Format');
+        //this.newInputDuration('Runtime');
+        //this.newVideoInformation('Video Information');
+        //this.newCurrentChapter('Current Chapter');
+        //this.newLanguage('Audio Language');
+    }
+
+    newAudioFormat(audioType) {
+        if (typeof audioType !== 'undefined') {
+            this.platform.log.debug('New audio format: ' + audioType);
+            if (this.mediaAudioFormat !== audioType) {
+                this.mediaAudioFormat = audioType;
+                this.audioFormat.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaAudioFormat);
+                //this.audioFormat.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaAudioFormat);
+                this.audioFormat.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
+                this.audioFormat.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
+        }
+    }
+
+    newAudioStatus(audio) {
+        if (typeof audio !== 'string' || audio.length === 0) {
+            this.newAudioFormat('Unknown');
+            return;
+        }
+        this.platform.log.debug(audio);
+        let newAudio = '';
+        if (audio.includes('Digital Plus')) {
+            newAudio = 'Dolby Digital Plus - Atmos';
+        }
+        else if (audio.includes('Dolby Digital')) {
+            newAudio = 'Dolby Digital';
+        }
+        else if (audio.includes('TrueHD')) {
+            newAudio = 'Dolby TrueHD - Atmos';
+        }
+        else if (audio.includes('DTS-HD High') || audio.includes('DTS HD High')) {
+            newAudio = 'DTS-HD High Resolution';
+        }
+        else if (audio.includes('DTS HD Master') || audio.includes('DTS HD MA')) {
+            newAudio = 'DTS HD MA - DTS X';
+        }
+        else if (audio.includes('DTS')) {
+            newAudio = 'DTS';
+        }
+        else if (audio.includes('LPCM')) {
+            newAudio = 'LPCM';
+        }
+        else if (audio.includes('MPEG')) {
+            newAudio = 'MPEG Audio';
+
+        }
+        else if (audio.includes('CD Audio')) {
+            newAudio = 'CD Audio';
+
+        }
+        else {
+            newAudio = audio;
+
+        }
+        this.newAudioFormat(newAudio);
+    }
+
+    newCurrentChapter(currentChapter) {
+        if (typeof currentChapter !== 'undefined') {
+            if (currentChapter.length >= 64) {
+                currentChapter = currentChapter.slice(0, 60) + "...";
+            }
+            this.platform.log.debug('New input progress: ' + currentChapter);
+            if (this.mediaChapter !== currentChapter) {
+                this.mediaChapter = currentChapter;
+                this.currentChaper.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaChapter);
+                //this.currentChaper.getCharacteristic(this.platform.Characteristic.ConfiguredName).updateValue(this.mediaChapter);
+                this.currentChaper.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
+                this.currentChaper.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
+        }
+    }
+
+    newInputDuration(newDuration) {
+        if (typeof newDuration !== 'undefined' && newDuration !== null) {
+            const runtimeText = String(newDuration);
+            this.platform.log.debug('New input duration: ' + runtimeText);
+            if (!runtimeText.includes('Runtime')) {
+                let hourMintue = ''
+                if (this.movieRemaining > 3600) {
+                    hourMintue = 'Hours';
+                }
+                else if (this.movieRemaining == 3600) {
+                    hourMintue = 'Hour';
+                }
+                else {
+                    hourMintue = 'Minutes';
+                }
+                this.mediaDuration = 'Runtime: ' + runtimeText + ' ' + hourMintue;
+            }
+            else {
+                this.mediaDuration = runtimeText;
+            }
+            if (this.runtime.getCharacteristic(this.platform.Characteristic.ConfiguredName).value !== this.mediaDuration) {
+                this.runtime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaDuration)
+            }
+        }
+    }
+
+    newInputName(newName) {
+        if (typeof newName === 'string' && newName.length > 0) {
+            if (/\.(iso|mkv|mp4|mp3)$/i.test(newName)) {
+                newName = newName.slice(0, -4);
+            }
+            if (newName.length >= 64) {
+                newName = newName.slice(0, 60) + "...";
+            }
+            this.platform.log.debug('New input name: ' + newName);
+            if (this.inputName !== newName) {
+                this.inputName = newName;
+                this.platform.log.debug(this.inputName);
+                this.videoAudioTitle.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.inputName);
+            }
+        }
+
+    }
+
+    newInputState(newInput) {
+        this.inputID = newInput;
+        this.tvService.updateCharacteristic(this.platform.Characteristic.ActiveIdentifier, this.inputID);
+        // this.tvService.getCharacteristic(this.platform.Characteristic.ActiveIdentifier).updateValue(this.inputID);
+    }
+
+    newLanguage(lang) {
+        if (typeof lang !== 'undefined') {
+            this.platform.log.debug('New audio language: ' + lang);
+            if (this.language !== lang) {
+                this.language = lang;
+                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.language);
+                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN)
+                this.audioLanguage.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
+        }
+    }
+
+    newLanguageSelector(langSelector) {
+        if (typeof langSelector !== 'string' || langSelector.length === 0) {
+            return 'Language Undefined';
+        }
+        langSelector = langSelector.toLowerCase();
+        let correctLanguage = ''
+        if (langSelector.includes('eng')) {
+            correctLanguage = 'English';
+        }
+        else if (langSelector.includes('ara')) {
+            correctLanguage = 'Arabic';
+        }
+        else if (langSelector.includes('cat')) {
+            correctLanguage = 'Catalan';
+        }
+        else if (langSelector.includes('chi') || langSelector.includes('zho')) {
+            correctLanguage = 'Chinese';
+        }
+        else if (langSelector.includes('ces') || langSelector.includes('cze')) {
+            correctLanguage = 'Czech';
+        }
+        else if (langSelector.includes('dan')) {
+            correctLanguage = 'Danish';
+        }
+        else if (langSelector.includes('deu') || langSelector.includes('gmh') || langSelector.includes('goh')) {
+            correctLanguage = 'German';
+        }
+        else if (langSelector.includes('dum') || langSelector.includes('dut')) {
+            correctLanguage = 'Dutch';
+        }
+        else if (langSelector.includes('egy')) {
+            correctLanguage = 'Egyptian';
+        }
+        else if (langSelector.includes('ell') || langSelector.includes('grc') || langSelector.includes('gre')) {
+            correctLanguage = 'Greek';
+        }
+        else if (langSelector.includes('fin')) {
+            correctLanguage = 'Finnish';
+        }
+        else if (langSelector.includes('fra') || langSelector.includes('fre') || langSelector.includes('frm') || langSelector.includes('fro')) {
+            correctLanguage = 'French';
+        }
+        else if (langSelector.includes('heb')) {
+            correctLanguage = 'Hebrew';
+        }
+        else if (langSelector.includes('hin')) {
+            correctLanguage = 'Hindi';
+        }
+        else if (langSelector.includes('hrv')) {
+            correctLanguage = 'Croatian';
+        }
+        else if (langSelector.includes('hun')) {
+            correctLanguage = 'Hungarian';
+        }
+        else if (langSelector.includes('ice') || langSelector.includes('isl')) {
+            correctLanguage = 'Icelandic';
+        }
+        else if (langSelector.includes('ita')) {
+            correctLanguage = 'Italian';
+        }
+        else if (langSelector.includes('jpn')) {
+            correctLanguage = 'Japanese';
+        }
+        else if (langSelector.includes('kor')) {
+            correctLanguage = 'Korean';
+        }
+        else if (langSelector.includes('peo') || langSelector.includes('per')) {
+            correctLanguage = 'Persian';
+        }
+        else if (langSelector.includes('pol')) {
+            correctLanguage = 'Polish';
+        }
+        else if (langSelector.includes('por')) {
+            correctLanguage = 'Portuguese';
+        }
+        else if (langSelector.includes('rus')) {
+            correctLanguage = 'Russian';
+        }
+        else if (langSelector.includes('ron') || langSelector.includes('run')) {
+            correctLanguage = 'Romanian';
+        }
+        else if (langSelector.includes('spa')) {
+            correctLanguage = 'Spanish';
+        }
+        else if (langSelector.includes('tur')) {
+            correctLanguage = 'Turkish';
+        }
+        else if (langSelector.includes('und')) {
+            correctLanguage = 'Language Undefined';
+        }
+        else {
+            correctLanguage = 'Language Undefined';
+        }
+        return correctLanguage;
+
+    }
+
+    newMovieTime(newMovieTime) {
+        if (this.showState === true || newMovieTime === 0 || this.bluryaDVD === true) {
+            if (newMovieTime === 0) {
+                this.currentMovieProgressState = false;
+                this.currentMovieProgress = 0;
+            }
+            if (newMovieTime !== 0) {
+                this.currentMovieProgressState = true;
+            }
+            if (this.movieRemaining !== 0) {
+                this.currentMovieProgress = Math.round(newMovieTime * 100 / (this.movieRemaining));
+            }
+            if (this.currentMovieProgressState === true && this.currentMovieProgress === 0) {
+                this.currentMovieProgress = 1;
+            }
+            if (this.currentMovieProgress > 100) { this.currentMovieProgress = 100 }
+            if (this.config.movieControl === true) {
+                if (this.config.changeDimmersToFan === false) {
+                    if (this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).value !== this.currentMovieProgress) {
+                        this.movieControlL.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentMovieProgress);
+                        // this.movieControlL.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentMovieProgress);
+                        this.movieControlL.updateCharacteristic(this.platform.Characteristic.On, this.currentMovieProgressState);
+                        //this.movieControlL.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentMovieProgressState);
+                    }
+                }
+                else {
+                    if (this.movieControlF.getCharacteristic(this.platform.Characteristic.RotationSpeed).value !== this.currentMovieProgress) {
+                        this.movieControlF.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.currentMovieProgress);
+                        // this.movieControlF.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentMovieProgress);
+                        this.movieControlF.updateCharacteristic(this.platform.Characteristic.Active, this.currentMovieProgressState === true ? 1 : 0);
+                        //this.movieControlF.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentMovieProgressState === true ? 1 : 0);
+                    }
+                }
+            }
+            if (this.config.remainMovieTimer) {
+                const targetMovieTimerActiveState = this.currentMovieProgressState ? 1 : 0;
+                if (this.movieTimer.getCharacteristic(this.platform.Characteristic.Active).value !== targetMovieTimerActiveState) {
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.Active, targetMovieTimerActiveState);
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.InUse, targetMovieTimerActiveState);
+                }
+                if (this.movieElapsed !== this.movieTimer.getCharacteristic(this.platform.Characteristic.RemainingDuration).value) {
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.RemainingDuration, this.movieElapsed);
+                }
+                if (this.movieRemaining !== this.movieTimer.getCharacteristic(this.platform.Characteristic.SetDuration).value) {
+                    this.movieTimer.updateCharacteristic(this.platform.Characteristic.SetDuration, this.movieRemaining);
+                }
+            }
+        }
+    }
+
+    newPlayBackState(newPlay) {
+        this.playBackState = newPlay;
+        if (this.turnOffCommand === false || (this.playBackState[0] === false && this.playBackState[1] === false && this.playBackState[2] === false)) {
+            if (this.playBackState[0] === true) {
+                this.mediaState = 0;
+            }
+            if (this.playBackState[1] === true) {
+                this.mediaState = 1;
+            }
+            if (this.playBackState[2] === true) {
+                this.mediaState = 2;
+            }
+            if (this.playBackState[0] === false && this.playBackState[1] === false && this.playBackState[2] === false) {
+                this.mediaState = 4;
+            }
+
+            if (this.tvService.getCharacteristic(this.platform.Characteristic.Active).value !== this.powerStateTV) {
+                this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
+            }
+            if (this.play.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[0]) {
+                this.play.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[0]);
+                // this.play.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[0]);
+                //this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+            }
+            if (this.pause.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[1]) {
+                this.pause.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[1]);
+                // this.pause.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[1]);
+                // this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+            }
+            if (this.stop.getCharacteristic(this.platform.Characteristic.On).value !== this.playBackState[2]) {
+                this.stop.updateCharacteristic(this.platform.Characteristic.On, this.playBackState[2]);
+                //this.stop.getCharacteristic(this.platform.Characteristic.On).updateValue(this.playBackState[2]);
+                //  this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+            }
+            if (this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).value !== this.mediaState) {
+                this.tvService.updateCharacteristic(this.platform.Characteristic.CurrentMediaState, this.mediaState);
+                // this.tvService.getCharacteristic(this.platform.Characteristic.CurrentMediaState).updateValue(this.mediaState);
+            }
+        }
+    }
+
+    newPowerState(newValue) {
+        if (this.turnOffCommand === false && this.turnOnCommand === false) {
+            if (newValue === true) {
+                this.powerStateTV = 1;
+                if (this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value === 'Media Title') {
+                    this.newInputName('Standby');
+                }
+            }
+            else {
+                this.powerStateTV = 0;
+                if (this.videoAudioTitle.getCharacteristic(this.platform.Characteristic.ConfiguredName).value === 'Standby') {
+                    this.newInputName('Media Title');
+                }
+            }
+            if (this.powerState !== newValue) {
+                this.powerState = newValue;
+                this.tvService.updateCharacteristic(this.platform.Characteristic.Active, this.powerStateTV);
+                //this.tvService.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.powerStateTV);
+                if (this.config.powerB === true) {
+                    this.service.updateCharacteristic(this.platform.Characteristic.On, this.powerState);
+                    //this.service.getCharacteristic(this.platform.Characteristic.On).updateValue(this.powerState);
+                }
+            }
+        }
+    }
+
+    newVideoInformation(videoFormat) {
+        if (typeof videoFormat !== 'undefined') {
+            this.platform.log.debug(videoFormat);
+            if (this.mediaInformation !== videoFormat) {
+                this.mediaInformation = videoFormat;
+                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.ConfiguredName, this.mediaInformation);
+                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.TargetVisibilityState, this.showState ? this.platform.Characteristic.TargetVisibilityState.SHOWN : this.platform.Characteristic.TargetVisibilityState.HIDDEN);
+                this.videoAudioElapseTime.updateCharacteristic(this.platform.Characteristic.CurrentVisibilityState, this.showState ? this.platform.Characteristic.CurrentVisibilityState.SHOWN : this.platform.Characteristic.CurrentVisibilityState.HIDDEN);
+            }
+        }
+
+    }
+
+    newVolumeStatus(newVolumeNum) {
+        if (this.turnOffCommand !== true || newVolumeNum === 0) {
+
+            if (this.currentVolume !== newVolumeNum) {
+                this.currentVolume = newVolumeNum;
+                if (newVolumeNum === 0) {
+                    this.currentMuteState = true;
+                    this.currentVolumeSwitch = false;
+                }
+                if (newVolumeNum !== 0) {
+                    this.currentMuteState = false;
+                    this.currentVolumeSwitch = true;
+                }
+                this.speakerService.updateCharacteristic(this.platform.Characteristic.Volume, this.currentVolume);
+                this.speakerService.updateCharacteristic(this.platform.Characteristic.Mute, this.currentMuteState);
+                // this.speakerService.getCharacteristic(this.platform.Characteristic.Volume).updateValue(this.currentVolume);
+                // this.speakerService.getCharacteristic(this.platform.Characteristic.Mute).updateValue(this.currentMuteState)
+                if (this.config.volume === true) {
+                    if (this.config.changeDimmersToFan === false) {
+                        this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.Brightness, this.currentVolume);
+                        //this.volumeDimmer.getCharacteristic(this.platform.Characteristic.Brightness).updateValue(this.currentVolume);
+                        this.volumeDimmer.updateCharacteristic(this.platform.Characteristic.On, this.currentVolumeSwitch);
+                        //this.volumeDimmer.getCharacteristic(this.platform.Characteristic.On).updateValue(this.currentVolumeSwitch);
+                    }
+                    else {
+                        this.volumeFan.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.currentVolume);
+                        // this.volumeFan.getCharacteristic(this.platform.Characteristic.RotationSpeed).updateValue(this.currentVolume);
+                        this.volumeFan.updateCharacteristic(this.platform.Characteristic.Active, this.currentVolumeSwitch === true ? 1 : 0);
+                        // this.volumeFan.getCharacteristic(this.platform.Characteristic.Active).updateValue(this.currentVolumeSwitch === true ? 1 : 0);
+                    }
+                }
+            }
+        }
+    }
+
+    pauseSwitchStateGet(callback) {
+        this.platform.log.debug('Pause State');
+        let currentValue = this.playBackState[1];
+        callback(null, currentValue);
+    }
+
+    pauseSwitchStateSet(value, callback) {
+        this.platform.log.debug('Pause set to', value);
+        if (value === true) {
+            this.sending([this.pressedButton('PAUSE')]);
+        }
+        callback(null);
+    }
+
+    playSwitchStateGet(callback) {
+        this.platform.log.debug('Play State');
+        let currentValue = this.playBackState[0];
+        callback(null, currentValue);
+    }
+
+    playSwitchStateSet(value, callback) {
+        this.platform.log.debug('Play set to:', value);
+        if (value === true) {
+            this.sending([this.pressedButton('PLAY')]);
+        }
+        callback(null);
+    }
+
+    pressedButton(name) {
+        const baseUrl = "http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=ir_code&ir_code=";
+        const irCode = BUTTON_IR_CODE_MAP[name];
+        if (typeof irCode === 'undefined') {
+            this.platform.log.debug('Unknown button name:', name);
+            return null;
+        }
+        return baseUrl + irCode + 'BF00&result_syntax=json';
+    }
 
     query(qName) {
         let key;
@@ -2658,331 +1871,160 @@ class duneHDAccessory {
         }
         return key;
     }
-    //////////Sending Command Dame Decoder///////////
-    commandName(keyS) {
-        this.platform.log.debug(keyS);
-        let keySent = '';
 
-        if (keyS.includes('A15E')) {
-            keySent = 'Power Off';
+    safeRemoveService(service) {
+        if (!service) {
+            return;
         }
-        else if (keyS.includes('standby')) {
-            keySent = 'Standby';
+        try {
+            this.accessory.removeService(service);
         }
-        else if (keyS.includes('position')) {
-            keySent = 'New Position';
+        catch (error) {
+            this.platform.log.debug('Skipping service removal:', error.message);
         }
-        else if (keyS.includes('9E61')) {
-            keySent = 'Recent';
-        }
-        else if (keyS.includes('A05F')) {
-            keySent = 'Power On';
-        }
-        else if (keyS.includes('EA15')) {
-            keySent = 'Cursor Up';
-        }
-        else if (keyS.includes('E916')) {
-            keySent = 'Cursor Down';
-        }
-        else if (keyS.includes('E817')) {
-            keySent = 'Cursor Left';
-        }
-        else if (keyS.includes('E718')) {
-            keySent = 'Cursor Right';
-        }
-        else if (keyS.includes('EB14')) {
-            keySent = 'Enter';
-        }
-        else if (keyS.includes('F906')) {
-            keySent = 'Search';
-        }
-        else if (keyS.includes('FB04')) {
-            keySent = 'Back';
-        }
-        else if (keyS.includes('B748')) {
-            keySent = 'Play/Pause';
-        }
-        else if (keyS.includes('B748')) {
-            keySent = 'Play';
-        }
-        else if (keyS.includes('E11E')) {
-            keySent = 'Pause';
-        }
-        else if (keyS.includes('E619')) {
-            keySent = 'Stop';
-        }
-        else if (keyS.includes('B649')) {
-            keySent = 'Previous Chapter';
-        }
-        else if (keyS.includes('E21D')) {
-            keySent = 'Next Chapter';
-        }
-        else if (keyS.includes('AF50')) {
-            keySent = 'Information';
-        }
-        else if (keyS.includes('E31C')) {
-            keySent = 'Rewind';
-        }
-        else if (keyS.includes('E41B')) {
-            keySent = 'Forward';
-        }
-        else if (keyS.includes('B44B')) {
-            keySent = 'Page Up';
-        }
-        else if (keyS.includes('B34C')) {
-            keySent = 'Page Down';
-        }
-        else if (keyS.includes('F807')) {
-            keySent = 'Pop-Up Menu';
-        }
-        else if (keyS.includes('BF40')) {
-            keySent = 'Red';
-        }
-        else if (keyS.includes('E01F')) {
-            keySent = 'Green';
-        }
-        else if (keyS.includes('FF00')) {
-            keySent = 'Yellow';
-        }
-        else if (keyS.includes('BE41')) {
-            keySent = 'Blue';
-        }
-        else if (keyS.includes('BB44')) {
-            keySent = 'Audio';
-        }
-        else if (keyS.includes('AB54')) {
-            keySent = 'Subtitle';
-        }
-        else if (keyS.includes('B04F')) {
-            keySent = 'Repeat';
-        }
-        else if (keyS.includes('B847')) {
-            keySent = 'PIP';
-        }
-        else if (keyS.includes('BD42')) {
-            keySent = 'Select';
-        }
-
-        else if (keyS.includes('AD52')) {
-            keySent = 'Volume Up';
-        }
-        else if (keyS.includes('AC53')) {
-            keySent = 'Volume Down';
-        }
-        else if (keyS.includes('B946')) {
-            keySent = 'Mute';
-        }
-        else if (keyS.includes('9F60')) {
-            keySent = 'Record';
-        }
-        else if (keyS.includes('B847')) {
-            keySent = 'Movie';
-        }
-        else if (keyS.includes('A758')) {
-            keySent = 'Music';
-        }
-        else if (keyS.includes('9C63')) {
-            keySent = 'TV';
-        }
-        else if (keyS.includes('EF10')) {
-            keySent = 'Eject';
-        }
-        else if (keyS.includes('light')) {
-            keySent = 'Light';
-        }
-        else if (keyS.includes('E51A')) {
-            keySent = 'Slow';
-        }
-        else if (keyS.includes('B04F')) {
-            keySent = 'Mouse';
-        }
-        else if (keyS.includes('getDeviceInfo')) {
-            keySent = 'Get Device Information';
-        }
-        else if (keyS.includes('seek')) {
-            keySent = 'Searching';
-        }
-        else if (keyS.includes('FA05')) {
-            keySent = 'Clear';
-        }
-        else if (keyS.includes('FD02')) {
-            keySent = 'Zoom';
-        }
-        else if (keyS.includes('B14E')) {
-            keySent = 'Setup';
-        }
-        else if (keyS.includes('AE51')) {
-            keySent = 'Top Menu';
-        }
-        else if (keyS.includes('B24D')) {
-            keySent = 'Angle';
-        }
-        else {
-            keySent = keyS
-        }
-        return keySent
     }
-    /////Dune HD controls/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    pressedButton(name) {
-        let key;
-        key = "http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=ir_code&ir_code=";
-        switch (name) {
-            //POWER ButtonGroup
-            case 'POWER ON':
-                key += 'A05F';
-                break;
-            case 'POWER OFF':
-                key += 'A15E';
-                break;
-            case 'RECENT':
-                key += '9E61';
-                break;
-            case 'CURSOR UP':
-                key += 'EA15';
-                break;
-            case 'CURSOR DOWN':
-                key += 'E916';
-                break;
-            case 'CURSOR LEFT':
-                key += 'E817';
-                break;
-            case 'CURSOR RIGHT':
-                key += 'E718';
-                break;
-            case 'CURSOR ENTER':
-                key += 'EB14';
-                break;
-            case 'SEARCH':
-                key += 'F906';
-                break;
-            case 'BACK':
-                key += 'FB04';
-                break;
-            case 'PLAY':
-                key += 'B748';
-                break;
-            case 'PLAY/PAUSE':
-                key += 'B748';
-                break;
-            case 'PAUSE':
-                key += 'E11E';
-                break;
-            case 'STOP':
-                key += 'E619';
-                break;
-            case 'PREVIOUS':
-                key += 'B649';
-                break;
-            case 'NEXT':
-                key += 'E21D';
-                break;
-            case 'INFO':
-                key += 'AF50';
-                break;
-            case 'REWIND':
-                key += 'E31C';
-                break;
-            case 'FORWAD':
-                key += 'E41B';
-                break;
-            case 'PAGE UP':
-                key += 'B44B';
-                break;
-            case 'PAGE DOWN':
-                key += 'B34C';
-                break;
-            case 'POP-UP MENU':
-                key += 'F807';
-                break;
-            case 'RED':
-                key += 'BF40';
-                break;
-            case 'GREEN':
-                key += 'E01F';
-                break;
-            case 'YELLOW':
-                key += 'FF00';
-                break;
-            case 'BLUE':
-                key += 'BE41';
-                break;
-            case 'AUDIO':
-                key += 'BB44';
-                break;
-            case 'SUBTITLE':
-                key += 'AB54';
-                break;
-            case 'REPEAT':
-                key += 'B04F';
-                break;
-            case 'PIP':
-                key += 'B847';
-                break;
-            case 'SELECT':
-                key += 'BD42';
-                break;
-            case 'VOLUME UP':
-                key += 'AD52';
-                break;
-            case 'VOLUME DOWN':
-                key += 'AC53';
-                break;
-            case 'MUTE':
-                key += 'B946';
-                break;
-            case 'RECORD':
-                key += '9F60';
-                break;
-            case 'MOVIE':
-                key += 'B847';
-                break;
-            case 'MUSIC':
-                key += 'A758';
-                break;
-            case 'TV':
-                key += '9C63';
-                break;
-            case 'EJECT':
-                key += 'EF10';
-                break;
-            case 'LIGHT':
-                key += 'light';
-                break;
-            case 'SLOW':
-                key += 'E51A';
-                break;
-            case 'MOUSE':
-                key += 'B04F';
-                break;
-            case 'CLEAR':
-                key += 'FA05';
-                break;
-            case 'ZOOM':
-                key += 'FD02';
-                break;
-            case 'SETUP':
-                key += 'B14E';
-                break;
-            case 'TOP MENU':
-                key += 'AE51';
-                break;
-            case 'ANGLE':
-                key += 'B24D';
-                break;
-        }
-        key += 'BF00&result_syntax=json';
 
-        // this.platform.log(key);
-        return key;
-    }
-    /////////Data Management/////////////////////////////////////////////////////////////
     secondsToTime(seconds) {
         let date = new Date(0);
-        date.setSeconds(parseInt(seconds)); // specify value for SECONDS here
+        date.setSeconds(this.toInt(seconds, 0)); // specify value for SECONDS here
         let timeString = date.toISOString().substr(11, 8);
         return timeString
     }
-    ////Update instructions
+
+    sending(url) {
+        this.platform.log.debug(url);
+        if (!Array.isArray(url) || url.length === 0 || typeof url[0] !== 'string') {
+            this.platform.log.debug('Skipping send because URL payload is invalid.');
+            return;
+        }
+        url = url[0];
+        let key;
+        if (url.includes('cgi-bin/do?cmd=status')) {
+            key = 'getDeviceInfo';
+        }
+        else if (url.includes('cgi-bin/do?cmd=standby')) {
+            key = 'Standby';
+        }
+        else if (url.includes('position')) {
+            key = 'position';
+        }
+        else {
+            let key1 = url.split('=');
+            key = key1[2];
+        }
+        const isPollRequest = key === 'getDeviceInfo';
+        if (isPollRequest === true && this.pollInFlight === true) {
+            return;
+        }
+        if (isPollRequest === true) {
+            this.pollInFlight = true;
+        }
+        const finishRequest = () => {
+            if (isPollRequest === true) {
+                this.pollInFlight = false;
+            }
+        };
+        this.platform.log.debug(url);
+        this.platform.log.debug(key);
+        this.httpNotResponding += 1;
+        const req = request.get(url, (res) => {
+            if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+                this.platform.log.debug('HTTP status error from Dune HD:', res.statusCode);
+            }
+            res.setEncoding('utf8');
+            let rawData = '';
+            res.on('data', (chunk) => { rawData += chunk; });
+            res.on('end', () => {
+                try {
+                    if (!rawData || rawData.trim().length === 0) {
+                        return;
+                    }
+                    let parsedData = JSON.parse(rawData);
+                    this.httpNotResponding = 0;
+                    this.httpEventDecoder(parsedData, key);
+                } catch (e) {
+                    this.platform.log.debug('Invalid JSON response from Dune HD:', e.message);
+                }
+                finally {
+                    finishRequest();
+                }
+            });
+        });
+        req.setTimeout(5000, () => {
+            this.platform.log.debug('HTTP request timed out for key:', key);
+            finishRequest();
+            req.destroy(new Error('Request timeout'));
+        });
+        req.on('error', (e) => {
+            finishRequest();
+            this.platform.log.debug('HTTP request failed:', e.message);
+        });
+    }
+
+    setMovieSeekPositionFromPercent(newValue) {
+        let newSendValue = Math.round(newValue * this.movieRemaining / 100);
+        if (newSendValue > this.movieRemaining) {
+            newSendValue = this.movieRemaining;
+        }
+        this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=set_playback_state&position=" + newSendValue + "&result_syntax=json"]);
+        this.newMovieTime(newSendValue);
+    }
+
+    setOn(value, callback) {
+        let duneHDState = value;
+        if (duneHDState === true) {
+            this.newPowerState(true);
+            this.turnOnCommand = true;
+            this.turnOffCommand = false;
+            this.sending([this.pressedButton('POWER ON')]);
+        }
+        else {
+            this.sending([this.pressedButton('STOP')]);
+            this.turnOffAll();
+            this.newPowerState(false);
+            this.turnOffCommand = true;
+            this.turnOnCommand = false;
+            setTimeout(() => {
+                this.sending([this.pressedButton('POWER OFF')]);
+            }, 1000);
+            //this.sending(["http://" + this.DUNEHD_IP + ":" + this.DUNEHD_PORT + "/cgi-bin/do?cmd=standby&result_syntax=json"]);
+            //this.sending([this.pressedButton('POWER OFF')]);
+        }
+        this.platform.log.debug('Set Power to ->', value);
+        callback(null);
+    }
+
+    stopSwitchStateGet(callback) {
+        this.platform.log.debug('Stop State');
+        let currentValue = this.playBackState[2];
+        callback(null, currentValue);
+    }
+
+    stopSwitchStateSet(value, callback) {
+        this.platform.log.debug('Stop set to:', value);
+        if (value === true) {
+            this.mediaDetailsReset();
+            this.sending([this.pressedButton('STOP')]);
+        }
+        callback(null);
+    }
+
+    time() {
+        let time = new Date();
+        return time.toLocaleDateString() + ' ' + time.toLocaleString('en-US', {
+            hour12: false,
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+            timeZoneName: 'short',
+        });
+    }
+
+    toInt(value, fallback = 0) {
+        const parsedValue = Number.parseInt(value, 10);
+        return Number.isFinite(parsedValue) ? parsedValue : fallback;
+    }
+
     turnOffAll() {
         this.newPowerState(false);
         this.newPlayBackState([false, false, false]);
@@ -2990,23 +2032,7 @@ class duneHDAccessory {
         this.mediaDetailsReset();
         //this.platform.log(this.accessory.services)
     }
-    mediaDetailsReset() {
-        // this.platform.log("Reset details");
-        this.newInputState(1);
-        this.showState = false;
-        this.movieRemaining = 0;
-        this.movieElapsed = 0;
-        this.currentMoviePosition = 0;
-        this.bluryaDVD = false;
-        this.subtitleLanguage = '';
-        this.newMovieTime(0);
-        this.newAudioFormat('Audio Format');
-        this.newInputName('Media Title');
-        this.newInputDuration('Runtime');
-        this.newVideoInformation('Video Information');
-        this.newCurrentChapter('Current Chapter');
-        this.newLanguage('Audio Language');
-    }
+
     udpServer() {
         this.server = udp.createSocket('udp4');
         this.server.on('error', (error) => {
